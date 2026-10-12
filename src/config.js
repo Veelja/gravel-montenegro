@@ -18,6 +18,11 @@ export const CFG = {
   stallTime: 0.6,     // seconds of pushing a stopped bike before the stroke is given up
   maxRingCadence: 3,
 
+  // Perfect strokes in first gear never stall: below crawlCadence they push at least
+  // crawlMargin times what the slope and rolling resistance push back
+  crawlCadence: 0.6,
+  crawlMargin: 1.25,
+
   // Timing zones, as a fraction of a revolution either side of the top
   perfect: 0.06,
   good: 0.13,

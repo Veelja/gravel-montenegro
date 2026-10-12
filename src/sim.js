@@ -10,6 +10,7 @@ export function createState() {
     coasting: true,    // legs are still; the next tap has to get them going again
     overrunTime: 0,    // seconds since the last stroke finished without a new tap
     strokeEnergy: 0,   // joules of the current stroke; sets how hard the push is
+    sure: false,       // the current stroke was timed perfectly
     pushing: false,    // legs are driving the wheel
     stalled: 0,        // seconds spent pushing without the bike moving
     power: 0,          // watts currently reaching the wheel
@@ -40,10 +41,15 @@ export function step(state, course, dt) {
   // the wheel is energy / development: strong and short in a low gear, weak and long in a
   // high one.
   state.pushing = !state.coasting && state.crank < state.strokeEnd;
-  const drive = state.pushing ? state.strokeEnergy / development(state.gear) : 0;
+  let drive = state.pushing ? state.strokeEnergy / development(state.gear) : 0;
 
   const grade = course.gradeAt(state.x);
   const weight = CFG.mass * CFG.g;
+  // A perfect stroke in first gear always brings the pedal round, however steep the road
+  // or tired the rider: below a crawl it pushes at least a little harder than the slope.
+  if (state.pushing && state.sure && state.gear === 1 && rawCadence(state) < CFG.crawlCadence) {
+    drive = Math.max(drive, (grade + CFG.crr) * weight * CFG.crawlMargin);
+  }
   const rolling = state.v > 0 ? CFG.crr * weight : 0;
   const force = weight * grade + rolling + CFG.aero * state.v * state.v - drive;
   state.v = Math.max(0, state.v - (force / CFG.mass) * dt);
@@ -152,6 +158,7 @@ export function pedal(state) {
     const bonk = state.bonked ? CFG.bonkFactor : 1;
     // This replaces whatever was left of the previous stroke, so tapping early wastes it
     state.strokeEnergy = CFG.strokeEnergy * quality * spin * bonk * stand;
+    state.sure = kind === 'perfect';
     state.strokeStart = state.crank;
     state.strokeEnd = end;
     state.coasting = false;
