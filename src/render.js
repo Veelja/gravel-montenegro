@@ -161,16 +161,17 @@ function drawRoad(c, state, course, scenes) {
   }
 }
 
-// The rider is a sheet of frames covering one turn of the cranks, starting with the near
-// pedal at the top. Every frame is the same size with the bike in the same place.
+// The rider is a sheet of frames, all the same size with the bike in the same place. They
+// are not evenly spread round the pedal stroke, so each is listed with the crank position
+// it shows (in turns, 0 = near pedal at the top) and the closest one is drawn.
 const SPRITE = {
   src: 'assets/rider.webp',
-  frames: 14,
-  w: 260,
-  h: 230,
-  hub: [56, 170],    // rear hub within a frame
-  wheelbase: 146.8,
-  wheelR: 56,        // hub to the bottom of the tyre
+  turns: [15, 38, 50, 195, 215, 283, 296, 310, 316, 322, 331, 342].map((deg) => deg / 360),
+  w: 250,
+  h: 215,
+  hub: [52, 161],    // rear hub within a frame
+  wheelbase: 146.3,
+  wheelR: 52,        // hub to the bottom of the tyre
   spokeR: 40,
 };
 const RIDER_WHEELBASE = 78; // on screen, in buffer pixels
@@ -189,7 +190,16 @@ function drawRider(c, state, course) {
   if (!riderSheet) return;
   const { w, h, hub, wheelbase, wheelR, spokeR } = SPRITE;
   const k = RIDER_WHEELBASE / wheelbase;
-  const frame = Math.floor(mod(state.crank, 1) * SPRITE.frames);
+  const turn = mod(state.crank, 1);
+  let frame = 0;
+  let nearest = 1;
+  SPRITE.turns.forEach((t, i) => {
+    const d = Math.abs(mod(turn - t + 0.5, 1) - 0.5);
+    if (d < nearest) {
+      nearest = d;
+      frame = i;
+    }
+  });
 
   c.save();
   c.translate(RIDER_X, ROAD_Y);
