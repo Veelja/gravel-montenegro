@@ -11,7 +11,7 @@ const PPM = 48;          // pixels per metre
 const EXAG = 2.5;        // vertical exaggeration so gradients read on screen
 const RIDER_X = 104;
 const ROAD_Y = 335;      // screen row where the wheels touch the road
-const MID_PARALLAX = 0.4; // scroll speed of the middle-distance hedge relative to the road
+const MID_PARALLAX = 0.28; // scroll speed of the middle-distance hedge relative to the road
 const TAU = Math.PI * 2;
 
 export const UI = {
