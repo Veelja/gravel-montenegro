@@ -14,8 +14,7 @@ const ROAD_Y = 335;      // screen row where the wheels touch the road
 const TAU = Math.PI * 2;
 
 export const UI = {
-  plus: { x: 17, y: 362, w: 38, h: 26 },
-  minus: { x: 17, y: 424, w: 38, h: 26 },
+  gear: { x: 11, y: 352, w: 50, h: 106 },
   ring: { cx: 124, cy: 402, r: 42 },
   pedal: { cx: 222, cy: 404, r: 42 },
 };
@@ -336,8 +335,10 @@ function buildControlsBase() {
   canvas.height = H;
   const c = canvas.getContext('2d');
 
-  panel(c, 11, 356, 50, 100, NAVY_EDGE);
-  panel(c, 12, 357, 48, 98, NAVY);
+  const g = UI.gear;
+  panel(c, g.x, g.y, g.w, g.h, NAVY_EDGE);
+  panel(c, g.x + 1, g.y + 1, g.w - 2, g.h - 2, NAVY);
+  rect(c, 24, 363, 2, 83, NAVY_EDGE);
 
   const { cx, cy, r } = UI.ring;
   const top = -Math.PI / 2;
@@ -380,19 +381,24 @@ function drawControls(c, state, pressed) {
   controlsBase ??= buildControlsBase();
   c.drawImage(controlsBase, 0, 0);
 
-  for (const key of ['plus', 'minus']) {
-    const b = UI[key];
-    const down = pressed[key] > 0;
-    panel(c, b.x, b.y, b.w, b.h, '#2a3042');
-    panel(c, b.x, b.y, b.w, b.h - 2, down ? '#8a93a8' : '#5a6274');
-    rect(c, b.x + 2, b.y + 1, b.w - 4, 1, down ? '#aab2c4' : '#737b8e');
-    const mx = b.x + b.w / 2;
-    const my = b.y + b.h / 2 - 1;
-    rect(c, mx - 6, my - 1, 12, 3, '#fff');
-    if (key === 'plus') rect(c, mx - 1, my - 6, 3, 13, '#fff');
+  // Gear slider: one point per gear, hardest at the top and widening like a volume wedge
+  for (let gear = 1; gear <= CFG.gears; gear++) {
+    const y = 441 - (gear - 1) * 7;
+    const w = 8 + Math.round(((gear - 1) * 10) / (CFG.gears - 1));
+    if (gear === state.gear) {
+      panel(c, 25 - w / 2 - 3, y - 2, w + 6, 8, NAVY_EDGE);
+      panel(c, 25 - w / 2 - 2, y - 1, w + 4, 6, '#fff');
+    } else {
+      rect(c, 25 - w / 2, y, w, 4, gear < state.gear ? '#8fa3d9' : '#3a4257');
+    }
   }
-  label('GEAR', 36, 402, 8, MUTED, 'center');
-  label(`${state.gear}/${CFG.gears}`, 36, 417, 13, '#fff', 'center');
+  const plus = pressed.plus > 0 ? '#5dff7a' : MUTED;
+  const minus = pressed.minus > 0 ? '#5dff7a' : MUTED;
+  rect(c, 44, 368, 9, 3, plus);
+  rect(c, 47, 365, 3, 9, plus);
+  rect(c, 44, 441, 9, 3, minus);
+  label('GEAR', 48, 400, 6, MUTED, 'center');
+  label(`${state.gear}`, 48, 416, 15, '#fff', 'center');
 
   // Timing ring: the dot is the pedal, and whole crank revolutions put it at the top
   const { cx, cy, r } = UI.ring;

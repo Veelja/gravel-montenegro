@@ -19,8 +19,8 @@ Then visit http://localhost:5173 (or `http://<your-PC-IP>:5173` from a phone on 
 | Action | Touch | Keyboard |
 |---|---|---|
 | Pedal | PEDAL button | Space |
-| Harder gear | `+` | Up arrow |
-| Easier gear | `-` | Down arrow |
+| Harder gear | Swipe up on the gear slider, or tap its top half | Up arrow |
+| Easier gear | Swipe down on the gear slider, or tap its bottom half | Down arrow |
 | Restart | | R |
 
 Tap as the dot on the ring reaches the green zone at the top. Too hard a gear grinds and

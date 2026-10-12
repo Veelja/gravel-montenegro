@@ -77,7 +77,9 @@ function doPedal() {
 
 function doShift(delta) {
   pressed[delta < 0 ? 'minus' : 'plus'] = 0.1;
-  if (shift(state, delta)) beep(delta < 0 ? 300 : 420, 0.04, 'triangle');
+  const changed = shift(state, delta);
+  if (changed) beep(delta < 0 ? 300 : 420, 0.04, 'triangle');
+  return changed;
 }
 
 function restart() {
@@ -93,19 +95,62 @@ function inRect(b, x, y, pad) {
   return x >= b.x - pad && x <= b.x + b.w + pad && y >= b.y - pad && y <= b.y + b.h + pad;
 }
 
+// Pointer position in buffer pixels
+function locate(e) {
+  const rect = canvas.getBoundingClientRect();
+  return [((e.clientX - rect.left) / rect.width) * W, ((e.clientY - rect.top) / rect.height) * H];
+}
+
+// The gear slider is relative: dragging from anywhere on it shifts one gear per GEAR_STEP
+// buffer pixels (up is harder), so it can be worked without looking. A touch that never
+// drags that far is a tap, shifting one gear up or down by which half it landed on.
+const GEAR_STEP = 8;
+let gearDrag = null; // { id, y0, shifted: gears moved so far, dragged }
+
 canvas.addEventListener('pointerdown', (e) => {
   e.preventDefault();
   if (state.finished) {
     if (canRestart()) restart();
     return;
   }
-  const rect = canvas.getBoundingClientRect();
-  const x = ((e.clientX - rect.left) / rect.width) * W;
-  const y = ((e.clientY - rect.top) / rect.height) * H;
-  if (inRect(UI.minus, x, y, 8)) doShift(-1);
-  else if (inRect(UI.plus, x, y, 8)) doShift(1);
-  else if (Math.hypot(x - UI.pedal.cx, y - UI.pedal.cy) <= UI.pedal.r + 16) doPedal();
+  const [x, y] = locate(e);
+  if (inRect(UI.gear, x, y, 8)) {
+    gearDrag = { id: e.pointerId, y0: y, shifted: 0, dragged: false };
+    try {
+      // Keep following the finger when it slides off the slider
+      canvas.setPointerCapture(e.pointerId);
+    } catch {
+      // pointer already gone; the drag just ends where it left the canvas
+    }
+  } else if (Math.hypot(x - UI.pedal.cx, y - UI.pedal.cy) <= UI.pedal.r + 16) doPedal();
 });
+
+canvas.addEventListener('pointermove', (e) => {
+  if (!gearDrag || e.pointerId !== gearDrag.id || state.finished) return;
+  const y = locate(e)[1];
+  // Whole steps travelled since the last shift, so it takes a full step either way
+  const want = gearDrag.shifted + Math.trunc((gearDrag.y0 - y) / GEAR_STEP - gearDrag.shifted);
+  while (gearDrag.shifted !== want) {
+    const delta = Math.sign(want - gearDrag.shifted);
+    gearDrag.dragged = true;
+    if (!doShift(delta)) {
+      // Out of gears: re-anchor here so turning back shifts straight away
+      gearDrag.y0 = y + gearDrag.shifted * GEAR_STEP;
+      break;
+    }
+    gearDrag.shifted += delta;
+  }
+});
+
+function endGearDrag(e) {
+  if (!gearDrag || e.pointerId !== gearDrag.id) return;
+  if (e.type === 'pointerup' && !gearDrag.dragged && !state.finished) {
+    doShift(gearDrag.y0 < UI.gear.y + UI.gear.h / 2 ? 1 : -1);
+  }
+  gearDrag = null;
+}
+canvas.addEventListener('pointerup', endGearDrag);
+canvas.addEventListener('pointercancel', endGearDrag);
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
 window.addEventListener('keydown', (e) => {
