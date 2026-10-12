@@ -230,9 +230,10 @@ function drawRider(c, state, course) {
 
 const GRADE_BARS = ['#ffd84d', '#ffb347', '#ff8a3d', '#ff6a4a', '#ff5a5a'];
 
-// The logo is a badge on the dashboard: beside the course profile, lapping over the empty
-// bottom corner of the stats panel. Like the text, it is drawn at full device resolution.
-const LOGO = { src: 'assets/logo.webp', x: 5, y: 43, w: 66, h: 31 };
+// The logo is a badge on the dashboard, straddling the seam between the stats panel and the
+// course profile; the readouts around it leave that spot clear. Like the text, it is drawn
+// at full device resolution.
+const LOGO = { src: 'assets/logo.webp', x: 119, y: 35, w: 45, h: 21 };
 let logo = null;
 {
   const img = new Image();
@@ -269,8 +270,9 @@ function drawHud(c, state, course) {
   rect(c, 96, 24, Math.round(90 * s), 7, sColor);
   rect(c, 96, 24, Math.round(90 * s), 2, 'rgba(255,255,255,0.35)');
   const rpm = Math.round(rawCadence(state) * 60);
-  label(`${rpm} rpm  ${Math.round(state.power)} W`, 95, 43, 7, MUTED);
-  label(`${Math.round(state.stamina)}%`, 187, 43, 7, '#fff', 'right');
+  label(`${rpm} rpm`, 95, 43, 7, MUTED);
+  label(`${Math.round(state.power)} W`, 187, 43, 7, MUTED, 'right');
+  label(`${Math.round(state.stamina)}%`, 187, 19, 7, '#fff', 'right');
 
   const grade = course.gradeAt(state.x) * 100;
   const gColor = grade > 6 ? '#ff5a5a' : grade > 2 ? '#ffd84d' : grade < -2 ? '#6fc3ff' : '#fff';
@@ -288,9 +290,9 @@ function drawHud(c, state, course) {
   }
 
   // Course profile with a position marker, so climbs can be anticipated
-  const px = 73;
+  const px = 8;
   const py = 51;
-  const pw = W - 8 - px;
+  const pw = W - 16;
   const ph = 24;
   panel(c, px, py, pw, ph, 'rgba(20,26,46,0.85)');
   const span = Math.max(1, course.maxHeight - course.minHeight);
