@@ -4,19 +4,36 @@ import { rect, disc, hash } from './pix.js';
 // full-screen painting in assets/bg. The painting stays put as the distant view, and its
 // bottom band is handed to the road renderer, which scrolls it past as the near verge.
 // Until a painting has loaded, a code-drawn placeholder stands in.
+// Optional per scene:
+//   near   bottom fraction of the painting used as the verge (default NEAR)
+//   hedge  [top, size] as fractions of the painting's height: the band reused as the
+//          middle-distance layer (default: the top of the verge band)
+//   pines  give that layer pointed crowns instead of rounded ones
+//   lift   raise that layer by this many pixels
+//   tint   multiply the road by this colour
 const SCENES = [
   { image: 'assets/bg/sveti-stefan.webp', from: 0, ground: '#3c6a2c' },
-  { image: 'assets/bg/lovcen.webp', from: 0.4, ground: '#3c6a2c' },
+  // Black Lake: the verge is the shallows, and the shoreline pines stand behind the road
+  {
+    image: 'assets/bg/durmitor.webp',
+    from: 0.24,
+    ground: '#a3b5a2',
+    near: 0.5,
+    hedge: [0.3, 0.2],
+    pines: true,
+    lift: 26,
+  },
+  { image: 'assets/bg/lovcen.webp', from: 0.52, ground: '#3c6a2c' },
   // Night: the road is tinted to match
-  { image: 'assets/bg/podgorica.webp', from: 0.77, ground: '#161c30', tint: '#6f78b4' },
+  { image: 'assets/bg/podgorica.webp', from: 0.78, ground: '#161c30', tint: '#6f78b4' },
 ];
-const FADE = 0.012;  // fraction of the course over which one scene fades into the next
-const ZOOM = 1.1;    // paintings are drawn a little oversize, leaving room to pan
+const FADE = 0.02;   // fraction of the course over which one scene fades into the next
+const ZOOM = 1.1;    // paintings are drawn at least this much oversize, leaving room to pan
 const NEAR = 0.36;   // bottom fraction of a painting used as the verge
 const NEAR_W = 288;  // verge tile width; mirrored, it divides the road strip exactly
-const MID = 0.22;    // fraction of a painting's height, from the top of the verge band, reused
-                     // as a hedge in the middle distance
-const CANOPY = 34;   // tallest bump of the hedge's silhouette, in pixels
+const MID = 0.22;    // fraction of a painting's height reused as the middle-distance layer
+const MID_H = 113;   // height of that layer on screen
+const CANOPY = 34;   // tallest crown of its silhouette, in pixels
 export const BACK_H = 360;
 const PLACEHOLDER_W = 540;
 
@@ -140,52 +157,59 @@ function mirrored(tile) {
   return out;
 }
 
-// Cuts a bushy outline along the top edge of a tile: overlapping rounded crowns of
-// different sizes over a low, ragged base
-function cutCanopy(c, w) {
+// Cuts a treeline along the top edge of a tile: overlapping crowns of different sizes,
+// rounded or pointed, over a low, ragged base
+function cutCanopy(c, w, pines) {
   const height = new Float32Array(w);
   for (let x = 0; x < w; x++) height[x] = 5 + (hash(x >> 2) % 4);
-  for (let i = 0; i < 16; i++) {
+  const crowns = Math.round(w / (pines ? 11 : 18));
+  for (let i = 0; i < crowns; i++) {
     const r = hash(i * 31 + 5);
     const cx = r % w;
-    const rad = 8 + ((r >>> 9) % 15);
-    const peak = rad + ((r >>> 15) % (CANOPY - rad));
+    const rad = pines ? 6 + ((r >>> 9) % 7) : 8 + ((r >>> 9) % 15);
+    const peak = pines ? 14 + ((r >>> 15) % (CANOPY - 14)) : rad + ((r >>> 15) % (CANOPY - rad));
     for (let dx = -rad; dx <= rad; dx++) {
       const x = cx + dx;
       if (x < 0 || x >= w) continue;
-      height[x] = Math.max(height[x], peak - rad + Math.sqrt(rad * rad - dx * dx));
+      const crown = pines
+        ? peak * (1 - Math.abs(dx) / (rad + 1))
+        : peak - rad + Math.sqrt(rad * rad - dx * dx);
+      height[x] = Math.max(height[x], crown);
     }
   }
   for (let x = 0; x < w; x++) c.clearRect(x, 0, 1, Math.round(CANOPY - height[x]));
 }
 
+function canvas(width, height) {
+  const el = document.createElement('canvas');
+  el.width = width;
+  el.height = height;
+  return [el, el.getContext('2d')];
+}
+
 function load(scene, w, h) {
   const img = new Image();
   img.onload = () => {
-    const far = document.createElement('canvas');
-    far.width = Math.round(w * ZOOM);
-    far.height = h;
-    const fh = (far.width * img.height) / img.width;
-    far.getContext('2d').drawImage(img, 0, (h - fh) / 3, far.width, fh);
+    // Distant view: scaled to cover the screen. A painting wider than the screen's shape
+    // simply has further to pan.
+    const k = Math.max((w * ZOOM) / img.width, h / img.height);
+    const [far, fc] = canvas(Math.round(img.width * k), h);
+    fc.drawImage(img, 0, (h - img.height * k) / 3, far.width, img.height * k);
 
-    const sy = img.height * (1 - NEAR);
-    const near = document.createElement('canvas');
-    near.width = NEAR_W;
-    near.height = Math.round((NEAR_W * (img.height - sy)) / img.width);
-    near
-      .getContext('2d')
-      .drawImage(img, 0, sy, img.width, img.height - sy, 0, 0, near.width, near.height);
+    const nearSize = scene.near ?? NEAR;
+    const sy = img.height * (1 - nearSize);
+    const [near, nc] = canvas(NEAR_W, Math.round((NEAR_W * img.height * nearSize) / img.width));
+    nc.drawImage(img, 0, sy, img.width, img.height - sy, 0, 0, near.width, near.height);
 
-    // Middle distance: the top of the verge band again, a shade darker and with a bushy
-    // silhouette, to stand behind the road and drift past slower than it
-    const mid = document.createElement('canvas');
-    mid.width = NEAR_W;
-    mid.height = Math.round((NEAR_W * img.height * MID) / img.width);
-    const mc = mid.getContext('2d');
-    mc.drawImage(img, 0, sy, img.width, img.height * MID, 0, 0, mid.width, mid.height);
+    // Middle distance: a band of the painting, a shade darker and with a treeline cut along
+    // its top, to stand behind the road and drift past slower than it
+    const [top, size] = scene.hedge ?? [1 - nearSize, MID];
+    const mk = Math.max(NEAR_W / img.width, MID_H / (img.height * size));
+    const [mid, mc] = canvas(Math.round(img.width * mk), MID_H);
+    mc.drawImage(img, 0, img.height * top, img.width, img.height * size, 0, 0, mid.width, MID_H);
     mc.fillStyle = 'rgba(8,14,30,0.22)';
-    mc.fillRect(0, 0, mid.width, mid.height);
-    cutCanopy(mc, mid.width);
+    mc.fillRect(0, 0, mid.width, MID_H);
+    cutCanopy(mc, mid.width, scene.pines);
 
     scene.far = far;
     scene.mid = mirrored(mid);
@@ -220,7 +244,7 @@ export function createBackdrop(w, h) {
     const mw = scene.mid.width;
     // Half a tile out of step with the verge, which is cut from the same part of the painting
     let x = -((((Math.round(scroll) + mw / 4) % mw) + mw) % mw);
-    for (; x < w; x += mw) c.drawImage(scene.mid, x, baseY - scene.mid.height);
+    for (; x < w; x += mw) c.drawImage(scene.mid, x, baseY - (scene.lift ?? 0) - MID_H);
   };
 
   // Scenes at `progress` (0..1 along the course): the one in view and, while it fades in,

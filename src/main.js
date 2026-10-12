@@ -102,9 +102,10 @@ function locate(e) {
 }
 
 // The gear slider is relative: dragging from anywhere on it shifts one gear per GEAR_STEP
-// buffer pixels (up is harder), so it can be worked without looking. A touch that never
-// drags that far is a tap, shifting one gear up or down by which half it landed on.
-const GEAR_STEP = 8;
+// buffer pixels (up is harder), so it can be worked without looking. The step matches the
+// spacing of the slider's points, so the knob keeps pace with the finger. A touch that
+// never drags that far is a tap, shifting one gear up or down by which half it landed on.
+const GEAR_STEP = UI.gear.step;
 let gearDrag = null; // { id, y0, shifted: gears moved so far, dragged }
 
 canvas.addEventListener('pointerdown', (e) => {
