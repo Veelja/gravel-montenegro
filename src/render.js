@@ -38,7 +38,7 @@ function label(str, x, y, size, color = '#fff', align = 'left', outline = null) 
   return item;
 }
 
-function formatTime(t) {
+export function formatTime(t) {
   const m = Math.floor(t / 60);
   const s = (t % 60).toFixed(1).padStart(4, '0');
   return `${m}:${s}`;
@@ -155,42 +155,59 @@ function drawRoad(c, state, course, scenes) {
   drawGateBack(c, gateAt(state, course));
 }
 
-// The finish gate is drawn at an angle, as if seen from a little before it: the near post
-// stands on the verge this side of the road, and the far post behind the wall and further
-// along, with the banner and the chequered line running between them.
-const GATE = { reach: 34, near: 11, far: -8, height: 132, banner: 24 };
+// The finish gate is drawn at an angle, as if seen from a little before it: the far post
+// stands behind the wall, and the near post further along on the verge this side of the
+// road, larger because it is closer. The banner climbs from one to the other, high enough
+// to ride under, and the chequered line crosses the road between them.
+const GATE = { reach: 42, far: -8, near: 11, farH: 165, nearH: 192 };
 
 // Screen positions of the gate's two post bases, or null while it is out of sight
 function gateAt(state, course) {
   const fx = Math.round(RIDER_X + (course.length - state.x) * PPM);
   if (fx > W + GATE.reach + 10) return null;
   const fy = Math.round(ROAD_Y - (course.heightAt(course.length) - course.heightAt(state.x)) * PPM * EXAG);
-  return { fx, fy, near: [fx - GATE.reach, fy + GATE.near], far: [fx + GATE.reach, fy + GATE.far] };
+  return { fx, fy, far: [fx - GATE.reach, fy + GATE.far], near: [fx + GATE.reach, fy + GATE.near] };
 }
 
-// Chequered post with red bands and a cap, standing on `baseY`
-function drawPost(c, x, baseY) {
-  const top = baseY - GATE.height;
-  rect(c, x - 3, top, 7, GATE.height, NAVY_EDGE);
-  for (let j = 0; j * 3 < GATE.height; j++) {
-    rect(c, x - 2, top + j * 3, 2, 3, j % 2 ? '#16161c' : '#f4f1e6');
-    rect(c, x, top + j * 3, 3, 3, j % 2 ? '#f4f1e6' : '#16161c');
+// Steel post, 2r+1 wide, with a chequered sleeve between two red bands, a cap, and a stone
+// foot in the grass
+function drawPost(c, x, baseY, height, r) {
+  const top = baseY - height;
+  const w = 2 * r + 1;
+  rect(c, x - r - 1, top, w + 2, height, NAVY_EDGE);
+  rect(c, x - r, top, w, height, '#7d838d');
+  rect(c, x - r, top, 1, height, '#b4b9c2');
+
+  const s0 = top + 16;
+  const s1 = baseY - 24;
+  for (let y = s0, k = 0; y < s1; y += r + 1, k++) {
+    const h = Math.min(r + 1, s1 - y);
+    rect(c, x - r, y, r, h, k % 2 ? '#16161c' : '#f4f1e6');
+    rect(c, x, y, r + 1, h, k % 2 ? '#f4f1e6' : '#16161c');
   }
-  rect(c, x - 2, top + 9, 5, 5, '#e23a2e');
-  rect(c, x - 2, baseY - 20, 5, 5, '#e23a2e');
-  rect(c, x - 4, top - 4, 9, 5, NAVY_EDGE);
-  rect(c, x - 3, top - 3, 7, 3, '#8a8f98');
+  for (const y of [s0 - 4, s1]) rect(c, x - r, y, w, 4, '#e23a2e');
+  for (const y of [s0 - 6, s1 + 4]) rect(c, x - r - 1, y, w + 2, 2, '#3f444d');
+
+  rect(c, x - r - 2, top - 3, w + 4, 4, NAVY_EDGE);
+  rect(c, x - r - 1, top - 2, w + 2, 2, '#8a8f98');
+  rect(c, x - 1, top - 5, 3, 2, NAVY_EDGE);
+
+  rect(c, x - r - 4, baseY - 6, w + 8, 8, NAVY_EDGE);
+  rect(c, x - r - 3, baseY - 5, w + 6, 6, '#8a8f98');
+  rect(c, x - r - 3, baseY - 5, w + 6, 1, '#b4b9c2');
+  rect(c, x - r - 6, baseY - 1, 3, 3, '#3c7030');
+  rect(c, x + r + 4, baseY - 2, 3, 4, '#4f8a3a');
 }
 
 // Everything the rider passes in front of: the line on the road, the far post, the banner
 function drawGateBack(c, gate) {
   if (!gate) return;
-  const { fx, fy, near, far } = gate;
+  const { fy, near, far } = gate;
   // The line crosses the gravel on the same slant as the gate
   for (let y = fy - 5; y <= fy + 9; y++) {
     const xc = near[0] + ((near[1] - 1 - y) / (near[1] - far[1])) * (far[0] - near[0]);
-    for (let k = 0; k < 3; k++) {
-      rect(c, xc + k * 3, y, 3, 1, (k + Math.floor((y - fy + 5) / 3)) % 2 ? '#16161c' : '#f4f1e6');
+    for (let k = 0; k < 4; k++) {
+      rect(c, xc - 6 + k * 3, y, 3, 1, (k + Math.floor((y - fy + 5) / 3)) % 2 ? '#16161c' : '#f4f1e6');
     }
   }
 
@@ -199,42 +216,51 @@ function drawGateBack(c, gate) {
   c.beginPath();
   c.rect(0, 0, W, fy - WALL_H);
   c.clip();
-  drawPost(c, far[0], far[1]);
+  drawPost(c, far[0], far[1], GATE.farH, 2);
   c.restore();
 
-  const x0 = near[0] + 4;
-  const x1 = far[0] - 4;
-  const y0 = near[1] - GATE.height + 5;
-  const y1 = far[1] - GATE.height + 5;
-  const ends = 10;
-  for (let sx = x0; sx <= x1; sx++) {
-    const y = Math.round(y0 + ((y1 - y0) * (sx - x0)) / (x1 - x0));
-    rect(c, sx, y - 1, 1, GATE.banner + 2, NAVY_EDGE);
-    rect(c, sx, y, 1, GATE.banner, '#f6efe0');
-    const i = sx - x0;
-    if (i < ends || i > x1 - x0 - ends) {
-      for (let j = 0; j < GATE.banner; j += 4) {
-        if (((i >> 2) + (j >> 2)) % 2) rect(c, sx, y + j, 1, 4, '#16161c');
+  // Banner: taller toward the near post, with chequered ends
+  const x0 = far[0] + 4;
+  const x1 = near[0] - 5;
+  const top0 = far[1] - GATE.farH + 8;
+  const top1 = near[1] - GATE.nearH + 8;
+  const h0 = 24;
+  const h1 = 32;
+  const n = x1 - x0;
+  const ends = 14;
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    const y = Math.round(top0 + (top1 - top0) * t);
+    const h = Math.round(h0 + (h1 - h0) * t);
+    rect(c, x0 + i, y - 1, 1, h + 2, NAVY_EDGE);
+    rect(c, x0 + i, y, 1, h, '#f6efe0');
+    const fromEnd = Math.min(i, n - i);
+    if (fromEnd < ends) {
+      for (let row = 0; row < 6; row++) {
+        const a = Math.round((row * h) / 6);
+        const b = Math.round(((row + 1) * h) / 6);
+        if (((fromEnd >> 2) + row) % 2) rect(c, x0 + i, y + a, 1, b - a, '#16161c');
       }
     }
   }
-  rect(c, x0 - 1, y0 - 1, 1, GATE.banner + 2, NAVY_EDGE);
-  rect(c, x1 + 1, y1 - 1, 1, GATE.banner + 2, NAVY_EDGE);
-  const text = label('FINISH', fx, (y0 + y1) / 2 + GATE.banner / 2 + 3, 9, '#e23a2e', 'center', '#4a0f0b');
-  text.angle = Math.atan2(y1 - y0, x1 - x0);
+  rect(c, x0 - 1, top0 - 1, 1, h0 + 2, NAVY_EDGE);
+  rect(c, x1 + 1, top1 - 1, 1, h1 + 2, NAVY_EDGE);
+  const text = label(
+    'FINISH',
+    (x0 + x1) / 2,
+    (top0 + top1) / 2 + (h0 + h1) / 4 + 4,
+    11,
+    '#e23a2e',
+    'center',
+    '#4a0f0b',
+  );
+  text.angle = Math.atan2(top1 - top0, n);
   text.stay = true;
 }
 
-// The near post, which the rider passes behind, on a stone foot in the grass
+// The near post, which the rider passes behind
 function drawGateFront(c, gate) {
-  if (!gate) return;
-  const [x, y] = gate.near;
-  drawPost(c, x, y);
-  rect(c, x - 7, y - 6, 15, 8, NAVY_EDGE);
-  rect(c, x - 6, y - 5, 13, 6, '#8a8f98');
-  rect(c, x - 6, y - 5, 13, 1, '#b4b9c2');
-  rect(c, x - 9, y - 1, 3, 3, '#3c7030');
-  rect(c, x + 7, y - 2, 3, 4, '#4f8a3a');
+  if (gate) drawPost(c, gate.near[0], gate.near[1], GATE.nearH, 3);
 }
 
 // The rider is a sheet of frames, all the same size with the bike in the same place. They
@@ -547,10 +573,11 @@ function drawFinish(c, state, best) {
   rect(c, 0, 0, W, H, 'rgba(10,14,28,0.55)');
   finishedAt ??= performance.now();
   drawConfetti(c, (performance.now() - finishedAt) / 1000);
-  label('FINISHED', W / 2, 112, 26, '#ffd84d', 'center', NAVY_EDGE);
-  label(formatTime(state.time), W / 2, 150, 30, '#fff', 'center', NAVY_EDGE);
-  if (best != null) label(`BEST ${formatTime(best)}`, W / 2, 170, 11, '#d3dbf0', 'center', NAVY_EDGE);
-  label('TAP TO RIDE AGAIN', W / 2, 196, 11, '#5dff7a', 'center', NAVY_EDGE);
+  // Kept above the finish banner
+  label('FINISHED', W / 2, 58, 26, '#ffd84d', 'center', NAVY_EDGE);
+  label(formatTime(state.time), W / 2, 96, 30, '#fff', 'center', NAVY_EDGE);
+  if (best != null) label(`BEST ${formatTime(best)}`, W / 2, 116, 11, '#d3dbf0', 'center', NAVY_EDGE);
+  label('TAP TO RIDE AGAIN', W / 2, 140, 11, '#5dff7a', 'center', NAVY_EDGE);
 }
 
 // `c` is the low-res pixel buffer; `out` is the device canvas, already scaled so that
@@ -563,7 +590,8 @@ export function draw(c, out, state, course, pressed, best) {
   drawRoad(c, state, course, backdrop.at(progress));
   drawRider(c, state, course);
   drawGateFront(c, gateAt(state, course));
-  drawHud(c, state, course);
+  // The result takes the dashboard's place at the finish
+  if (!state.finished) drawHud(c, state, course);
   drawControls(c, state, pressed);
   if (state.finished) {
     // Only the result is readable over the dimmed screen
