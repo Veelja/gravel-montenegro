@@ -1,6 +1,7 @@
 import { buildCourse } from './course.js';
 import { createState, step, pedal, shift } from './sim.js';
 import { draw, W, H, UI } from './render.js';
+import * as board from './leaderboard.js';
 
 const BEST_KEY = 'gravel-montenegro-best';
 
@@ -45,6 +46,7 @@ function resize() {
   canvas.width = Math.round(W * scale * dpr);
   canvas.height = Math.round(H * scale * dpr);
   ctx.setTransform(canvas.width / W, 0, 0, canvas.height / H, 0, 0);
+  document.documentElement.style.setProperty('--u', `${scale}px`);
 }
 
 let audio = null;
@@ -84,6 +86,7 @@ function doShift(delta) {
 
 function restart() {
   state = createState();
+  board.hide();
 }
 
 // Ignore input briefly after finishing so a late pedal tap doesn't skip the result
@@ -156,6 +159,8 @@ canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
 window.addEventListener('keydown', (e) => {
   if (e.repeat) return;
+  // Typing a name on the leaderboard isn't game input
+  if (e.target instanceof HTMLInputElement || e.target instanceof HTMLButtonElement) return;
   const isPedal = e.code === 'Space' || e.code === 'Enter';
   const isUp = e.code === 'ArrowUp' || e.code === 'KeyW';
   const isDown = e.code === 'ArrowDown' || e.code === 'KeyS';
@@ -189,6 +194,7 @@ function frame(now) {
   if (state.finished && !wasFinished) {
     finishedAt = now;
     saveBest(state.time);
+    board.show(state.time);
     beep(990, 0.4, 'triangle');
   }
   for (const key in pressed) pressed[key] = Math.max(0, pressed[key] - dt);

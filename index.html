@@ -26,10 +26,57 @@
       -webkit-touch-callout: none;
       -webkit-tap-highlight-color: transparent;
     }
+    /* The leaderboard sits over the lower part of the finish screen. --u is the size of one
+       buffer pixel, set by main.js, so it scales with the canvas. */
+    #board {
+      position: fixed;
+      left: 50%;
+      top: calc(50% - 32 * var(--u));
+      width: calc(230 * var(--u));
+      transform: translateX(-50%);
+      box-sizing: border-box;
+      padding: calc(6 * var(--u));
+      border: calc(1 * var(--u)) solid #0a0e1c;
+      border-radius: calc(4 * var(--u));
+      background: rgba(20, 26, 46, 0.92);
+      color: #fff;
+      font: bold calc(9 * var(--u)) "Trebuchet MS", "DejaVu Sans", Verdana, sans-serif;
+    }
+    #board[hidden] { display: none; }
+    #board-form { display: flex; gap: calc(4 * var(--u)); }
+    #board input, #board button {
+      font: inherit;
+      padding: calc(4 * var(--u));
+      border: calc(1 * var(--u)) solid #0a0e1c;
+      border-radius: calc(3 * var(--u));
+    }
+    #board input { flex: 1; min-width: 0; background: #fff; color: #141a2e; }
+    #board button { background: #5dff7a; color: #0a0e1c; }
+    #board input:disabled, #board button:disabled { opacity: 0.5; }
+    #board-status { min-height: 1.2em; margin: calc(4 * var(--u)) 0; color: #9aa6c4; text-align: center; }
+    #board-list { margin: 0; padding: 0; list-style: none; counter-reset: rank; }
+    #board-list li {
+      display: flex;
+      gap: calc(4 * var(--u));
+      padding: calc(1.5 * var(--u)) calc(3 * var(--u));
+      counter-increment: rank;
+    }
+    #board-list li::before { content: counter(rank); width: 1.6em; color: #9aa6c4; }
+    #board-list li span:first-child { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #board-list li.mine { border-radius: calc(2 * var(--u)); background: #ffd84d; color: #0a0e1c; }
+    #board-list li.mine::before { color: inherit; }
   </style>
 </head>
 <body>
   <canvas id="game"></canvas>
+  <div id="board" hidden>
+    <form id="board-form">
+      <input id="board-name" maxlength="16" placeholder="YOUR NAME" autocomplete="off" autocapitalize="characters" enterkeyhint="send" required>
+      <button>SUBMIT</button>
+    </form>
+    <div id="board-status"></div>
+    <ol id="board-list"></ol>
+  </div>
   <script type="module" src="src/main.js"></script>
 </body>
 </html>
