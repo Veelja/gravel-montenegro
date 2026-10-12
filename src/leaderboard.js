@@ -1,12 +1,14 @@
 import { formatTime } from './render.js';
 
 // Supabase project holding the shared leaderboard. The key is the public (publishable/anon)
-// one, which is meant to ship in the page: row-level security only lets it read scores and
-// add new ones. Leave either blank and the game runs without a leaderboard.
+// one, which is meant to ship in the page: it can only read the board's names and times,
+// and save a time through a database function. Leave either blank and the game runs
+// without a leaderboard.
 const SUPABASE_URL = 'https://kazqbqhzqevdnfdiqzad.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_2_yti-wMa9CCIEtAHxyIog_ZCObXobd';
 
 const NAME_KEY = 'gravel-montenegro-name';
+const PLAYER_KEY = 'gravel-montenegro-player';
 const NAME_MAX = 16;
 const TOP = 10;
 
@@ -19,9 +21,43 @@ const submitButton = form.querySelector('button');
 const status = document.getElementById('board-status');
 const list = document.getElementById('board-list');
 
-let runTime = 0;      // the run on show
-let submitted = null; // { name, time } once this run is on the board
-let shown = 0;        // counts show() calls, so a slow reply for an earlier run is dropped
+function load(key) {
+  try {
+    return localStorage.getItem(key) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+function save(key, value) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // storage unavailable; it just won't be remembered
+  }
+}
+
+// A random UUID. crypto.randomUUID needs a secure context, which a phone opening the
+// game over the LAN doesn't get.
+function newId() {
+  const b = crypto.getRandomValues(new Uint8Array(16));
+  b[6] = (b[6] & 0x0f) | 0x40;
+  b[8] = (b[8] & 0x3f) | 0x80;
+  const h = Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+}
+
+// This device's player: the board keeps one row per id, holding that player's best time.
+// The id is never readable from the board, so only this device can replace its row.
+let player = load(PLAYER_KEY);
+if (!player) {
+  player = newId();
+  save(PLAYER_KEY, player);
+}
+
+let runTime = 0; // the run on show
+let mine = null; // { name, time } of this player's row on the board, once known
+let shown = 0;   // counts show() calls, so a slow reply for an earlier run is dropped
 
 async function request(path, options = {}) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
@@ -37,22 +73,6 @@ async function fetchTop() {
   return res.json();
 }
 
-function loadName() {
-  try {
-    return localStorage.getItem(NAME_KEY) ?? '';
-  } catch {
-    return '';
-  }
-}
-
-function saveName(name) {
-  try {
-    localStorage.setItem(NAME_KEY, name);
-  } catch {
-    // storage unavailable; the name just won't be remembered
-  }
-}
-
 function renderList(rows) {
   list.replaceChildren();
   let marked = false;
@@ -63,8 +83,7 @@ function renderList(rows) {
     name.textContent = row.name;
     time.textContent = formatTime(row.time_s);
     item.append(name, time);
-    // The stored time is single precision, so it only matches to within rounding
-    if (!marked && submitted && row.name === submitted.name && Math.abs(row.time_s - submitted.time) < 0.005) {
+    if (!marked && mine && row.name === mine.name && Math.abs(row.time_s - mine.time) < 0.005) {
       item.className = 'mine';
       marked = true;
     }
@@ -78,51 +97,65 @@ async function refresh() {
     const rows = await fetchTop();
     if (token !== shown) return;
     renderList(rows);
-    if (!rows.length) status.textContent = 'NO TIMES YET - BE THE FIRST';
+    if (!rows.length && !status.textContent) status.textContent = 'NO TIMES YET - BE THE FIRST';
   } catch {
     if (token === shown) status.textContent = 'LEADERBOARD UNAVAILABLE';
   }
 }
 
-form.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const name = nameInput.value.trim().slice(0, NAME_MAX);
-  if (!name || submitted) return;
+// Put this run on the board under `name`. The board only takes it if it beats the player's
+// time already there, and answers with their best time and its place either way.
+async function submit(name) {
   const token = shown;
-  const time = Math.round(runTime * 100) / 100;
-  nameInput.blur();
   nameInput.disabled = submitButton.disabled = true;
   status.textContent = 'SAVING...';
+  let result;
   try {
-    await request('scores', {
+    const res = await request('rpc/submit_score', {
       method: 'POST',
-      headers: { Prefer: 'return=minimal' },
-      body: JSON.stringify({ name, time_s: time }),
+      body: JSON.stringify({ p_player: player, p_name: name, p_time: Math.round(runTime * 100) / 100 }),
     });
+    result = await res.json();
   } catch {
     if (token !== shown) return;
+    // The form doubles as a retry button for a player who already has a name
+    form.hidden = false;
     nameInput.disabled = submitButton.disabled = false;
     status.textContent = 'COULD NOT SAVE - TRY AGAIN';
+    refresh();
     return;
   }
-  saveName(name);
+  save(NAME_KEY, name);
+  mine = { name, time: result.time_s };
   if (token !== shown) return;
-  submitted = { name, time };
-  status.textContent = 'SAVED';
+  form.hidden = true;
+  status.textContent = `${name} - BEST ${formatTime(result.time_s)} - #${result.rank}`;
   refresh();
+}
+
+form.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const name = nameInput.value.trim().slice(0, NAME_MAX);
+  if (!name || submitButton.disabled) return;
+  nameInput.blur();
+  submit(name);
 });
 
-// Bring the board up for a run that just finished in `time` seconds
+// Bring the board up for a run that just finished in `time` seconds. The name is asked for
+// once; after that every run is sent in under it.
 export function show(time) {
   if (!enabled) return;
   shown++;
   runTime = time;
-  submitted = null;
-  nameInput.value = loadName();
+  const name = load(NAME_KEY);
+  nameInput.value = name;
+  nameInput.readOnly = Boolean(name);
   nameInput.disabled = submitButton.disabled = false;
+  form.hidden = Boolean(name);
   status.textContent = '';
   panel.hidden = false;
-  refresh();
+  if (name) submit(name);
+  else refresh();
 }
 
 export function hide() {
