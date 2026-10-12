@@ -484,7 +484,7 @@ function drawControls(c, state, pressed) {
   // there, like a volume wedge. It is see-through so the scenery and rider show behind it;
   // only the current gear's knob is nearly solid.
   const gx = 4;
-  const barW = (gear) => 24 + Math.round(((gear - 1) * 40) / (CFG.gears - 1));
+  const barW = (gear) => 18 + Math.round(((gear - 1) * 28) / (CFG.gears - 1));
   const pipY = (gear) => 458 - (gear - 1) * UI.gear.step;
   for (let gear = 1; gear <= CFG.gears; gear++) {
     if (gear === state.gear) continue;
@@ -501,13 +501,13 @@ function drawControls(c, state, pressed) {
   }
   c.globalAlpha = 0.85;
   const mark = (y, on, isPlus) => {
-    rect(c, gx, y - 1, 11, 5, NAVY_EDGE);
-    if (isPlus) rect(c, gx + 3, y - 4, 5, 11, NAVY_EDGE);
-    rect(c, gx + 1, y, 9, 3, on ? '#5dff7a' : '#fff');
-    if (isPlus) rect(c, gx + 4, y - 3, 3, 9, on ? '#5dff7a' : '#fff');
+    rect(c, gx, y - 1, 17, 7, NAVY_EDGE);
+    if (isPlus) rect(c, gx + 5, y - 6, 7, 17, NAVY_EDGE);
+    rect(c, gx + 1, y, 15, 5, on ? '#5dff7a' : '#fff');
+    if (isPlus) rect(c, gx + 6, y - 5, 5, 15, on ? '#5dff7a' : '#fff');
   };
-  mark(pipY(CFG.gears) - 11, pressed.plus > 0, true);
-  mark(pipY(1) + 14, pressed.minus > 0, false);
+  mark(pipY(CFG.gears) - 16, pressed.plus > 0, true);
+  mark(pipY(1) + 13, pressed.minus > 0, false);
   c.globalAlpha = 0.9;
   const ky = pipY(state.gear);
   const kw = barW(state.gear);
