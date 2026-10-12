@@ -292,7 +292,7 @@ function drawRider(c, state, course) {
   if (!riderSheet) return;
   const { w, h, hub, wheelbase, wheelR, spokeR } = SPRITE;
   const k = RIDER_WHEELBASE / wheelbase;
-  const turn = mod(state.crank, 1);
+  const turn = mod(state.crank + state.idleTurns, 1);
   let frame = 0;
   let nearest = 1;
   SPRITE.turns.forEach((t, i) => {

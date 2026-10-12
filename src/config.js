@@ -32,7 +32,11 @@ export const CFG = {
   overrun: 0.25,         // how far past the top the crank runs on before the legs stop
   overrunMaxTime: 1.5,   // seconds; the legs also stop if the crank dawdles past the top
   restartQuality: 0.5,   // tapping late, or getting the legs going again after coasting
-  pushOffSpeed: 0.5,     // m/s; below this a restart is a full-power push-off
+  pushOffSpeed: 1.2,     // m/s; below this (so, from the idle crawl) a restart is a full-power push-off
+
+  // With no input the rider keeps crawling rather than stopping
+  idleSpeed: 1.0,        // m/s
+  idleCadence: 0.6,      // rev/s the legs turn at while idling
 
   // Spinning out: above spinStart the legs deliver less and less per stroke
   spinStart: 1.6,

@@ -11,6 +11,7 @@ export function createState() {
     overrunTime: 0,    // seconds since the last stroke finished without a new tap
     strokeEnergy: 0,   // joules of the current stroke; sets how hard the push is
     sure: false,       // the current stroke was timed perfectly
+    idleTurns: 0,      // revolutions the legs have turned on their own, for the animation
     pushing: false,    // legs are driving the wheel
     stalled: 0,        // seconds spent pushing without the bike moving
     power: 0,          // watts currently reaching the wheel
@@ -53,6 +54,12 @@ export function step(state, course, dt) {
   const rolling = state.v > 0 ? CFG.crr * weight : 0;
   const force = weight * grade + rolling + CFG.aero * state.v * state.v - drive;
   state.v = Math.max(0, state.v - (force / CFG.mass) * dt);
+  // Once under way the rider never stops: with no input, or too little for the slope, the
+  // legs keep turning over slowly and the bike holds a crawl
+  if (state.started && state.v <= CFG.idleSpeed) {
+    state.v = CFG.idleSpeed;
+    if (state.coasting) state.idleTurns += CFG.idleCadence * dt;
+  }
 
   state.x += state.v * dt;
   state.power = drive * state.v;
