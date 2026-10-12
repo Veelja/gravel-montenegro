@@ -233,7 +233,7 @@ const GRADE_BARS = ['#ffd84d', '#ffb347', '#ff8a3d', '#ff6a4a', '#ff5a5a'];
 // The logo is a badge on the dashboard, straddling the seam between the stats panel and the
 // course profile; the readouts around it leave that spot clear. Like the text, it is drawn
 // at full device resolution.
-const LOGO = { src: 'assets/logo.webp', x: 119, y: 35, w: 45, h: 21 };
+const LOGO = { src: 'assets/logo.webp', x: 112, y: 35, w: 58, h: 27 };
 let logo = null;
 {
   const img = new Image();
@@ -291,7 +291,7 @@ function drawHud(c, state, course) {
 
   // Course profile with a position marker, so climbs can be anticipated
   const px = 8;
-  const py = 51;
+  const py = 56;
   const pw = W - 16;
   const ph = 24;
   panel(c, px, py, pw, ph, 'rgba(20,26,46,0.85)');
@@ -323,8 +323,8 @@ function drawHud(c, state, course) {
     hint = 'GRINDING - SHIFT DOWN -';
   }
   if (hint) {
-    panel(c, 40, 79, W - 80, 14, 'rgba(20,26,46,0.85)');
-    label(hint, W / 2, 89, 7, hintColor, 'center');
+    panel(c, 40, 84, W - 80, 14, 'rgba(20,26,46,0.85)');
+    label(hint, W / 2, 94, 7, hintColor, 'center');
   }
 }
 
