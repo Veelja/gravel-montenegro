@@ -14,6 +14,9 @@ const FADE = 0.012;  // fraction of the course over which one scene fades into t
 const ZOOM = 1.1;    // paintings are drawn a little oversize, leaving room to pan
 const NEAR = 0.36;   // bottom fraction of a painting used as the verge
 const NEAR_W = 288;  // verge tile width; mirrored, it divides the road strip exactly
+const MID = 0.22;    // fraction of a painting's height, from the top of the verge band, reused
+                     // as a hedge in the middle distance
+const CANOPY = 34;   // tallest bump of the hedge's silhouette, in pixels
 export const BACK_H = 360;
 const PLACEHOLDER_W = 540;
 
@@ -137,6 +140,25 @@ function mirrored(tile) {
   return out;
 }
 
+// Cuts a bushy outline along the top edge of a tile: overlapping rounded crowns of
+// different sizes over a low, ragged base
+function cutCanopy(c, w) {
+  const height = new Float32Array(w);
+  for (let x = 0; x < w; x++) height[x] = 5 + (hash(x >> 2) % 4);
+  for (let i = 0; i < 16; i++) {
+    const r = hash(i * 31 + 5);
+    const cx = r % w;
+    const rad = 8 + ((r >>> 9) % 15);
+    const peak = rad + ((r >>> 15) % (CANOPY - rad));
+    for (let dx = -rad; dx <= rad; dx++) {
+      const x = cx + dx;
+      if (x < 0 || x >= w) continue;
+      height[x] = Math.max(height[x], peak - rad + Math.sqrt(rad * rad - dx * dx));
+    }
+  }
+  for (let x = 0; x < w; x++) c.clearRect(x, 0, 1, Math.round(CANOPY - height[x]));
+}
+
 function load(scene, w, h) {
   const img = new Image();
   img.onload = () => {
@@ -154,7 +176,19 @@ function load(scene, w, h) {
       .getContext('2d')
       .drawImage(img, 0, sy, img.width, img.height - sy, 0, 0, near.width, near.height);
 
+    // Middle distance: the top of the verge band again, a shade darker and with a bushy
+    // silhouette, to stand behind the road and drift past slower than it
+    const mid = document.createElement('canvas');
+    mid.width = NEAR_W;
+    mid.height = Math.round((NEAR_W * img.height * MID) / img.width);
+    const mc = mid.getContext('2d');
+    mc.drawImage(img, 0, sy, img.width, img.height * MID, 0, 0, mid.width, mid.height);
+    mc.fillStyle = 'rgba(8,14,30,0.22)';
+    mc.fillRect(0, 0, mid.width, mid.height);
+    cutCanopy(mc, mid.width);
+
     scene.far = far;
+    scene.mid = mirrored(mid);
     scene.near = mirrored(near);
   };
   img.src = scene.image;
@@ -173,14 +207,20 @@ export function createBackdrop(w, h) {
     load(scene, w, h);
   });
 
-  // The distant view pans slowly across the painting over the length of its stage
-  const paint = (c, scene, progress) => {
+  // The distant view pans slowly across the painting over the length of its stage. The
+  // hedge in front of it is tiled sideways, `scroll` pixels along, with its foot at `baseY`.
+  const paint = (c, scene, progress, scroll, baseY) => {
     if (!scene.far) {
       c.drawImage(placeholder, 0, 0);
       return;
     }
     const local = Math.min(1, Math.max(0, (progress - scene.from) / (scene.to - scene.from)));
     c.drawImage(scene.far, -Math.round(local * (scene.far.width - w)), 0);
+
+    const mw = scene.mid.width;
+    // Half a tile out of step with the verge, which is cut from the same part of the painting
+    let x = -((((Math.round(scroll) + mw / 4) % mw) + mw) % mw);
+    for (; x < w; x += mw) c.drawImage(scene.mid, x, baseY - scene.mid.height);
   };
 
   // Scenes at `progress` (0..1 along the course): the one in view and, while it fades in,
@@ -194,12 +234,12 @@ export function createBackdrop(w, h) {
 
   return {
     at,
-    draw(c, progress) {
+    draw(c, progress, scroll, baseY) {
       const { base, over, t } = at(progress);
-      paint(c, base, progress);
+      paint(c, base, progress, scroll, baseY);
       if (over) {
         c.globalAlpha = t;
-        paint(c, over, progress);
+        paint(c, over, progress, scroll, baseY);
         c.globalAlpha = 1;
       }
     },

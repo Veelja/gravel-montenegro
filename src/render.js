@@ -11,6 +11,7 @@ const PPM = 48;          // pixels per metre
 const EXAG = 2.5;        // vertical exaggeration so gradients read on screen
 const RIDER_X = 104;
 const ROAD_Y = 335;      // screen row where the wheels touch the road
+const MID_PARALLAX = 0.4; // scroll speed of the middle-distance hedge relative to the road
 const TAU = Math.PI * 2;
 
 export const UI = {
@@ -462,7 +463,7 @@ export function draw(c, out, state, course, pressed, best) {
   labels.length = 0;
   rect(c, 0, 0, W, H, '#3f7d38');
   const progress = Math.min(1, Math.max(0, state.x / course.length));
-  backdrop.draw(c, progress);
+  backdrop.draw(c, progress, state.x * PPM * MID_PARALLAX, ROAD_Y + 50);
   drawRoad(c, state, course, backdrop.at(progress));
   drawRider(c, state, course);
   drawHud(c, state, course);
