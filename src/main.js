@@ -68,8 +68,14 @@ function beep(freq, duration, type = 'square', volume = 0.06) {
   }
 }
 
+// Count a game event in the visit statistics, when their script has loaded
+function track(event) {
+  window.goatcounter?.count?.({ path: event, title: event, event: true });
+}
+
 function doPedal() {
   pressed.pedal = 0.1;
+  if (!state.started) track('ride-started');
   const kind = pedal(state);
   if (kind === 'perfect') beep(880, 0.08);
   else if (kind === 'good') beep(660, 0.08);
@@ -195,6 +201,7 @@ function frame(now) {
     finishedAt = now;
     saveBest(state.time);
     board.show(state.time);
+    track('ride-finished');
     beep(990, 0.4, 'triangle');
   }
   for (const key in pressed) pressed[key] = Math.max(0, pressed[key] - dt);
