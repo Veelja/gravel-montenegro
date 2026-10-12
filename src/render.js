@@ -166,13 +166,13 @@ function drawRoad(c, state, course, scenes) {
 // it shows (in turns, 0 = near pedal at the top) and the closest one is drawn.
 const SPRITE = {
   src: 'assets/rider.webp',
-  turns: [15, 38, 50, 195, 215, 283, 296, 310, 316, 322, 331, 342].map((deg) => deg / 360),
-  w: 250,
-  h: 215,
-  hub: [52, 161],    // rear hub within a frame
-  wheelbase: 146.3,
-  wheelR: 52,        // hub to the bottom of the tyre
-  spokeR: 40,
+  turns: [10, 55, 90, 100, 120, 135, 150, 165, 285, 325, 330, 345].map((deg) => deg / 360),
+  w: 284,
+  h: 248,
+  hub: [61, 185],    // rear hub within a frame
+  wheelbase: 161.6,
+  wheelR: 60,        // hub to the bottom of the tyre
+  spokeR: 44,
 };
 const RIDER_WHEELBASE = 78; // on screen, in buffer pixels
 
