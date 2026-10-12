@@ -1,9 +1,19 @@
 import { rect, disc, hash } from './pix.js';
 
-// Everything behind the road. If assets/bg/backdrop.png exists it is used; otherwise a
-// code-drawn placeholder stands in. The image is scaled to BACK_H tall and tiled
-// sideways, mirroring every other copy so the seams always match.
-const IMAGE = 'assets/bg/backdrop.png';
+// Everything behind the road. The course passes through one scene per stage, each a
+// full-screen painting in assets/bg. The painting stays put as the distant view, and its
+// bottom band is handed to the road renderer, which scrolls it past as the near verge.
+// Until a painting has loaded, a code-drawn placeholder stands in.
+const SCENES = [
+  { image: 'assets/bg/sveti-stefan.webp', from: 0, ground: '#3c6a2c' },
+  { image: 'assets/bg/lovcen.webp', from: 0.4, ground: '#3c6a2c' },
+  // Night: the road is tinted to match
+  { image: 'assets/bg/podgorica.webp', from: 0.77, ground: '#161c30', tint: '#6f78b4' },
+];
+const FADE = 0.012;  // fraction of the course over which one scene fades into the next
+const ZOOM = 1.1;    // paintings are drawn a little oversize, leaving room to pan
+const NEAR = 0.36;   // bottom fraction of a painting used as the verge
+const NEAR_W = 288;  // verge tile width; mirrored, it divides the road strip exactly
 export const BACK_H = 360;
 const PLACEHOLDER_W = 540;
 
@@ -127,30 +137,71 @@ function mirrored(tile) {
   return out;
 }
 
-export function createBackdrop() {
+function load(scene, w, h) {
+  const img = new Image();
+  img.onload = () => {
+    const far = document.createElement('canvas');
+    far.width = Math.round(w * ZOOM);
+    far.height = h;
+    const fh = (far.width * img.height) / img.width;
+    far.getContext('2d').drawImage(img, 0, (h - fh) / 3, far.width, fh);
+
+    const sy = img.height * (1 - NEAR);
+    const near = document.createElement('canvas');
+    near.width = NEAR_W;
+    near.height = Math.round((NEAR_W * (img.height - sy)) / img.width);
+    near
+      .getContext('2d')
+      .drawImage(img, 0, sy, img.width, img.height - sy, 0, 0, near.width, near.height);
+
+    scene.far = far;
+    scene.near = mirrored(near);
+  };
+  img.src = scene.image;
+}
+
+// w, h: size of the pixel buffer the backdrop fills
+export function createBackdrop(w, h) {
   const tile = document.createElement('canvas');
   tile.width = PLACEHOLDER_W;
   tile.height = BACK_H;
   paintPlaceholder(tile.getContext('2d'), PLACEHOLDER_W);
-  let strip = mirrored(tile);
+  const placeholder = mirrored(tile);
 
-  const img = new Image();
-  img.onload = () => {
-    const scaled = document.createElement('canvas');
-    scaled.width = Math.max(1, Math.round((img.width * BACK_H) / img.height));
-    scaled.height = BACK_H;
-    const c = scaled.getContext('2d');
-    c.imageSmoothingEnabled = false;
-    c.drawImage(img, 0, 0, scaled.width, scaled.height);
-    strip = mirrored(scaled);
+  SCENES.forEach((scene, i) => {
+    scene.to = i + 1 < SCENES.length ? SCENES[i + 1].from : 1;
+    load(scene, w, h);
+  });
+
+  // The distant view pans slowly across the painting over the length of its stage
+  const paint = (c, scene, progress) => {
+    if (!scene.far) {
+      c.drawImage(placeholder, 0, 0);
+      return;
+    }
+    const local = Math.min(1, Math.max(0, (progress - scene.from) / (scene.to - scene.from)));
+    c.drawImage(scene.far, -Math.round(local * (scene.far.width - w)), 0);
   };
-  img.src = IMAGE;
+
+  // Scenes at `progress` (0..1 along the course): the one in view and, while it fades in,
+  // the next one with its opacity
+  const at = (progress) => {
+    let i = 0;
+    while (i + 1 < SCENES.length && progress >= SCENES[i + 1].from - FADE / 2) i++;
+    const t = i > 0 ? (progress - SCENES[i].from) / FADE + 0.5 : 1;
+    return t < 1 ? { base: SCENES[i - 1], over: SCENES[i], t } : { base: SCENES[i], over: null, t: 0 };
+  };
 
   return {
-    draw(c, scroll) {
-      const w = strip.width;
-      let x = -(((Math.round(scroll) % w) + w) % w);
-      for (; x < c.canvas.width; x += w) c.drawImage(strip, x, 0);
+    at,
+    draw(c, progress) {
+      const { base, over, t } = at(progress);
+      paint(c, base, progress);
+      if (over) {
+        c.globalAlpha = t;
+        paint(c, over, progress);
+        c.globalAlpha = 1;
+      }
     },
   };
 }

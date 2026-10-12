@@ -8,10 +8,10 @@ export const W = 270;
 export const H = 480;
 
 const PPM = 48;          // pixels per metre
+const RIDER_PPM = 58;    // the rider is drawn a little larger than life
 const EXAG = 2.5;        // vertical exaggeration so gradients read on screen
 const RIDER_X = 104;
 const ROAD_Y = 335;      // screen row where the wheels touch the road
-const PARALLAX = 0.012;  // backdrop scroll speed relative to the road
 const TAU = Math.PI * 2;
 
 export const UI = {
@@ -27,9 +27,12 @@ const NAVY_EDGE = '#0a0e1c';
 const MUTED = '#9aa6c4';
 const KIND_COLOR = { perfect: '#5dff7a', good: '#ffd84d', weak: '#ff9a3d', miss: '#ff5a5a' };
 
-const backdrop = createBackdrop();
+const OUTLINE = '#14141a';
 
-// Text is drawn at full device resolution on top of the pixel buffer, so it stays readable
+const backdrop = createBackdrop(W, H);
+
+// Text is drawn at full device resolution on top of the pixel buffer, so it stays readable.
+// `color` may be a [top, bottom] pair for a vertical gradient.
 const labels = [];
 function label(str, x, y, size, color = '#fff', align = 'left', outline = null) {
   labels.push({ str, x, y, size, color, align, outline });
@@ -44,18 +47,19 @@ function formatTime(t) {
 const STONES = ['#cdbb98', '#bda982', '#d8c8a6'];
 const VERGE = '#4f8a3a';
 
-// Wall, gravel and verge are painted once into a strip that repeats every 24 m; each
-// frame copies it column by column at the height of the road.
+// Wall, gravel and verge are painted once per scene into a strip that repeats every 24 m;
+// each frame copies it column by column at the height of the road. The verge is the
+// bottom band of the scene's painting, or plain grass until that has loaded.
 const STRIP_W = 9 * 128;
-const STRIP_H = 93;
+const STRIP_H = 215;
 const WALL_H = 17; // strip rows above the road surface row
-let roadStrip = null;
-function buildRoadStrip() {
+function buildRoadStrip(scene) {
   const canvas = document.createElement('canvas');
   canvas.width = STRIP_W;
   canvas.height = STRIP_H;
   const c = canvas.getContext('2d');
   const y = WALL_H;
+  const near = scene.near;
   for (let wp = 0; wp < STRIP_W; wp++) {
     // Dry stone wall on the far side: two staggered courses
     for (let k = 0; k < 2; k++) {
@@ -78,38 +82,63 @@ function buildRoadStrip() {
     if ((p & 7) === 0) rect(c, wp, y - 3 + ((p >>> 3) % 11), 1, 1, '#9c7d4a');
     if (((p >>> 8) & 7) === 0) rect(c, wp, y - 3 + ((p >>> 11) % 11), 1, 1, '#ecd4a0');
 
-    // Verge in front of the road
-    rect(c, wp, y + 10, 1, STRIP_H - y - 10, VERGE);
+    // Verge in front of the road, with a fringe of grass over the gravel's edge
+    if (!near) rect(c, wp, y + 10, 1, STRIP_H - y - 10, VERGE);
     const tuft = (hash(wp + 7777) >>> 4) % 4;
     rect(c, wp, y + 10 - tuft, 1, tuft + 2, '#3c7030');
     const f = hash(wp * 3 + 1);
-    if (f % 23 === 0 && wp < STRIP_W - 1) {
+    if (!near && f % 23 === 0 && wp < STRIP_W - 1) {
       rect(c, wp, y + 14 + ((f >>> 5) % 58), 2, 2, f & 64 ? '#f2d24a' : '#b98be0');
     }
+  }
+  if (near) {
+    if (scene.tint) {
+      c.globalCompositeOperation = 'multiply';
+      rect(c, 0, 0, STRIP_W, y + 12, scene.tint);
+      c.globalCompositeOperation = 'source-over';
+    }
+    rect(c, 0, y + 10 + near.height, STRIP_W, STRIP_H, scene.ground);
+    for (let x = 0; x < STRIP_W; x += near.width) c.drawImage(near, x, y + 10);
   }
   return canvas;
 }
 
-function drawRoad(c, state, course) {
-  roadStrip ??= buildRoadStrip();
+function roadStripFor(scene) {
+  if (!scene.strip || scene.stripNear !== scene.near) {
+    scene.strip = buildRoadStrip(scene);
+    scene.stripNear = scene.near;
+  }
+  return scene.strip;
+}
+
+function drawRoad(c, state, course, scenes) {
   const h0 = course.heightAt(state.x);
   const roadY = (wx) => Math.round(ROAD_Y - (course.heightAt(wx) - h0) * PPM * EXAG);
   const screenX = (wx) => Math.round(RIDER_X + (wx - state.x) * PPM);
 
-  // Neighbouring columns at the same height are copied in one go
-  c.fillStyle = VERGE;
   const wp0 = Math.floor((state.x - RIDER_X / PPM) * PPM);
   const topAt = (sx) => roadY(state.x + (sx - RIDER_X) / PPM) - WALL_H;
-  let start = 0;
-  let top = topAt(0);
-  for (let sx = 1; sx <= W; sx++) {
-    const next = sx < W ? topAt(sx) : NaN;
-    if (next === top && mod(wp0 + sx, STRIP_W) !== 0) continue;
-    const n = sx - start;
-    c.drawImage(roadStrip, mod(wp0 + start, STRIP_W), 0, n, STRIP_H, start, top, n, STRIP_H);
-    c.fillRect(start, top + STRIP_H, n, H - top - STRIP_H);
-    start = sx;
-    top = next;
+  const paint = (scene) => {
+    const strip = roadStripFor(scene);
+    c.fillStyle = scene.near ? scene.ground : VERGE;
+    // Neighbouring columns at the same height are copied in one go
+    let start = 0;
+    let top = topAt(0);
+    for (let sx = 1; sx <= W; sx++) {
+      const next = sx < W ? topAt(sx) : NaN;
+      if (next === top && mod(wp0 + sx, STRIP_W) !== 0) continue;
+      const n = sx - start;
+      c.drawImage(strip, mod(wp0 + start, STRIP_W), 0, n, STRIP_H, start, top, n, STRIP_H);
+      c.fillRect(start, top + STRIP_H, n, H - top - STRIP_H);
+      start = sx;
+      top = next;
+    }
+  };
+  paint(scenes.base);
+  if (scenes.over) {
+    c.globalAlpha = scenes.t;
+    paint(scenes.over);
+    c.globalAlpha = 1;
   }
 
   // Distance posts every 10 m, labelled every 50 m
@@ -135,18 +164,38 @@ function drawRoad(c, state, course) {
   }
 }
 
-function drawWheel(c, cx, cy, angle) {
-  ring(c, cx, cy, 17, 3, '#c79a52');
-  ring(c, cx, cy, 17, 1, '#8a6a34');
-  ring(c, cx, cy, 14, 1, '#2a2a2a');
-  for (let k = 0; k < 6; k++) {
-    const a = angle + (k * Math.PI) / 6;
-    const dx = Math.cos(a) * 13;
-    const dy = Math.sin(a) * 13;
-    line(c, cx - dx, cy - dy, cx + dx, cy + dy, '#a9adb3');
+const WHEEL_R = 20;
+function drawWheel(c, cx, cy, angle, rear) {
+  // Knobbly tyre, tan sidewall, dark rim
+  for (let k = 0; k < 18; k++) {
+    const a = angle + (k * TAU) / 18;
+    disc(c, cx + Math.cos(a) * (WHEEL_R + 0.5), cy + Math.sin(a) * (WHEEL_R + 0.5), 1, OUTLINE);
   }
-  disc(c, cx, cy, 2, '#2a2a2a');
+  ring(c, cx, cy, WHEEL_R, 2, OUTLINE);
+  ring(c, cx, cy, WHEEL_R - 2, 2, '#e08a2c');
+  ring(c, cx, cy, WHEEL_R - 4, 1, '#2a2a2e');
+  for (let k = 0; k < 5; k++) {
+    const a = angle + (k * Math.PI) / 5;
+    const dx = Math.cos(a) * (WHEEL_R - 5);
+    const dy = Math.sin(a) * (WHEEL_R - 5);
+    line(c, cx - dx, cy - dy, cx + dx, cy + dy, '#3d3f45');
+  }
+  if (rear) {
+    // Cassette
+    disc(c, cx, cy, 5, '#8a6418');
+    disc(c, cx, cy, 4, '#d9a53a');
+    ring(c, cx, cy, 3, 1, '#8a6418');
+  } else {
+    // Brake rotor
+    ring(c, cx, cy, 6, 1, '#b9bcc2');
+  }
+  disc(c, cx, cy, 1, OUTLINE);
 }
+
+const FRAME = '#8d9440';
+const JERSEY = '#c8362b';
+const SKIN = '#e0a57c';
+const SHORTS = '#1b1c22';
 
 // Bike and rider are laid out in metres (x forward, y up, origin on the road between the
 // wheels) and rotated to the slope point by point, which keeps every pixel crisp.
@@ -154,10 +203,19 @@ function drawRider(c, state, course) {
   const tilt = Math.atan(course.gradeAt(state.x) * EXAG);
   const cos = Math.cos(tilt);
   const sin = Math.sin(tilt);
-  const P = ([x, y]) => [RIDER_X + PPM * (x * cos - y * sin), ROAD_Y - PPM * (x * sin + y * cos)];
+  const P = ([x, y]) => [
+    RIDER_X + RIDER_PPM * (x * cos - y * sin),
+    ROAD_Y - RIDER_PPM * (x * sin + y * cos),
+  ];
   const L = (a, b, color, t) => line(c, ...P(a), ...P(b), color, t);
   const D = (a, r, color) => disc(c, ...P(a), r, color);
+  // Segments [from, to, colour, thickness] sharing one dark outline, so joints stay clean
+  const G = (...segs) => {
+    for (const [a, b, , t] of segs) L(a, b, OUTLINE, t + 2);
+    for (const [a, b, color, t] of segs) L(a, b, color, t);
+  };
   const mix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+  const off = (a, dx, dy) => [a[0] + dx, a[1] + dy];
 
   const rear = [-0.52, 0.35];
   const front = [0.52, 0.35];
@@ -165,7 +223,7 @@ function drawRider(c, state, course) {
   const seat = [-0.25, 0.8];
   const headTop = [0.36, 0.86];
   const headBottom = [0.39, 0.7];
-  const hand = [0.48, 0.9];
+  const hand = [0.5, 0.9];
 
   // Out of the saddle while pushing a heavy gear
   const standing = state.pushing && rawCadence(state) < CFG.grindBelow * 0.8;
@@ -178,7 +236,7 @@ function drawRider(c, state, course) {
   const nearPedal = pedalAt(a);
   const farPedal = pedalAt(a + Math.PI);
 
-  const leg = (foot, shorts, skin) => {
+  const leg = (foot, shorts, skin, sock) => {
     const len = 0.44;
     const dx = foot[0] - hip[0];
     const dy = foot[1] - hip[1];
@@ -189,98 +247,154 @@ function drawRider(c, state, course) {
     const ny = -dx / d;
     const side = nx >= 0 ? 1 : -1;
     const knee = [hip[0] + dx / 2 + nx * bend * side, hip[1] + dy / 2 + ny * bend * side];
-    L(hip, knee, shorts, 6);
-    L(knee, foot, skin, 4);
-    L(mix(knee, foot, 0.75), foot, '#f4f4f4', 4);
-    L([foot[0] - 0.04, foot[1]], [foot[0] + 0.1, foot[1]], '#1c1c1c', 3);
+    G([knee, foot, skin, 4], [hip, knee, shorts, 6]);
+    L(mix(knee, foot, 0.72), foot, sock, 4);
+    L(off(foot, -0.05, 0), off(foot, 0.11, 0), OUTLINE, 4);
   };
 
-  leg(farPedal, '#0e0f14', '#b07f5c');
-  L(bb, farPedal, '#1c1c1c', 2);
+  leg(farPedal, '#0e0f14', '#b07f5c', '#b9bcc2');
+  L(bb, farPedal, OUTLINE, 2);
 
   const spin = state.x / 0.35;
-  drawWheel(c, ...P(rear), spin);
-  drawWheel(c, ...P(front), spin);
+  drawWheel(c, ...P(rear), spin, true);
+  drawWheel(c, ...P(front), spin, false);
 
-  const FRAME = '#8d9050';
-  L(rear, seat, FRAME, 2);
-  L(rear, bb, FRAME, 2);
-  L(bb, seat, FRAME, 3);
-  L(seat, headTop, FRAME, 3);
-  L(bb, headBottom, FRAME, 3);
-  L(headTop, headBottom, FRAME, 3);
-  L(headBottom, front, '#2a2a2a', 2);
-  L(seat, [-0.27, 0.92], '#2a2a2a', 2);
-  L([-0.38, 0.93], [-0.17, 0.93], '#141414', 3);
-  L(headTop, [0.43, 0.93], '#2a2a2a', 2);
-  L([0.43, 0.93], [0.5, 0.91], '#141414', 2);
-  L([0.5, 0.91], [0.52, 0.8], '#141414', 2);
-  D(bb, 4, '#3a3d44');
-  D(bb, 2, '#8a8d94');
+  // Chain and rear derailleur
+  L(off(bb, 0, 0.08), off(rear, 0, 0.06), '#4a3c1c', 1);
+  L(off(bb, 0, -0.08), off(rear, 0.03, -0.14), '#4a3c1c', 1);
+  L(off(rear, 0.01, -0.04), off(rear, 0.03, -0.14), OUTLINE, 2);
+
+  G(
+    [rear, seat, FRAME, 2],
+    [rear, bb, FRAME, 2],
+    [headBottom, front, FRAME, 2],
+    [bb, seat, FRAME, 3],
+    [seat, headTop, FRAME, 3],
+    [bb, headBottom, FRAME, 3],
+    [headTop, headBottom, FRAME, 3],
+  );
+  // Bottle on the down tube
+  G([off(mix(bb, headBottom, 0.38), -0.04, 0.04), off(mix(bb, headBottom, 0.62), -0.04, 0.04), '#6f7a34', 3]);
+  // Seatpost, saddle with a tail light, and a bag slung under it
+  L(seat, [-0.27, 0.92], OUTLINE, 2);
+  L([-0.36, 0.85], [-0.3, 0.84], '#2b2e36', 5);
+  L([-0.4, 0.93], [-0.17, 0.93], OUTLINE, 3);
+  D([-0.41, 0.92], 1, '#ff4a3a');
+  // Stem and drop bars
+  L(headTop, [0.43, 0.93], OUTLINE, 2);
+  L([0.43, 0.93], [0.53, 0.92], OUTLINE, 3);
+  L([0.53, 0.92], [0.56, 0.84], OUTLINE, 2);
+  L([0.56, 0.84], [0.5, 0.79], OUTLINE, 2);
+  // Chainring
+  D(bb, 5, OUTLINE);
+  D(bb, 3, '#3a3d44');
+  D(bb, 1, '#9a9da4');
 
   // Torso with a backpack on the back
-  L(hip, shoulder, '#c0392b', 11);
   const tx = shoulder[0] - hip[0];
   const ty = shoulder[1] - hip[1];
   const tl = Math.hypot(tx, ty);
-  const back = [(-ty / tl) * 0.11, (tx / tl) * 0.11];
-  const packLow = mix(hip, shoulder, 0.3);
-  const packHigh = mix(hip, shoulder, 0.8);
-  L(
-    [packLow[0] + back[0], packLow[1] + back[1]],
-    [packHigh[0] + back[0], packHigh[1] + back[1]],
-    '#5c6b2e',
-    7,
-  );
-  D(hip, 4, '#1b1c22');
+  const back = [(-ty / tl) * 0.12, (tx / tl) * 0.12];
+  const packLow = off(mix(hip, shoulder, 0.3), ...back);
+  const packHigh = off(mix(hip, shoulder, 0.82), ...back);
+  G([hip, shoulder, JERSEY, 11]);
+  L(off(hip, 0.04, -0.03), off(mix(hip, shoulder, 0.8), 0.07, -0.05), '#a52a22', 3);
+  G([packLow, packHigh, '#5c6b2e', 7]);
+  L(off(packLow, ...back.map((v) => v * 0.2)), off(packHigh, ...back.map((v) => v * 0.2)), '#7c8c42', 2);
+  D(hip, 5, OUTLINE);
+  D(hip, 4, SHORTS);
 
-  L(bb, nearPedal, '#55585e', 2);
-  leg(nearPedal, '#1b1c22', '#e0a57c');
+  L(bb, nearPedal, OUTLINE, 4);
+  L(bb, nearPedal, '#6a6d75', 2);
+  leg(nearPedal, SHORTS, SKIN, '#f4f4f4');
 
-  L(shoulder, mix(shoulder, hand, 0.4), '#a83226', 5);
-  L(mix(shoulder, hand, 0.4), hand, '#e0a57c', 3);
-  D(hand, 2, '#1c1c1c');
+  const elbow = off(mix(shoulder, hand, 0.45), -0.03, -0.04);
+  G([elbow, hand, SKIN, 3], [shoulder, elbow, JERSEY, 5]);
+  D(hand, 3, OUTLINE);
 
-  D(head, 5, '#e0a57c');
-  D([head[0] - 0.02, head[1] + 0.05], 6, '#f4f4f4');
-  D([head[0] + 0.04, head[1] - 0.04], 4, '#e0a57c');
-  L([head[0] - 0.08, head[1] + 0.09], [head[0] + 0.04, head[1] + 0.13], '#9aa0a8', 1);
-  L([head[0] + 0.03, head[1] - 0.01], [head[0] + 0.11, head[1] - 0.02], '#1c1c1c', 2);
+  // Head: helmet with vents, sunglasses
+  const lid = off(head, -0.02, 0.05);
+  D(head, 6, OUTLINE);
+  D(lid, 7, OUTLINE);
+  D(head, 5, SKIN);
+  D(lid, 6, '#f4f4f4');
+  D(off(head, 0.04, -0.04), 4, SKIN);
+  L(off(head, -0.1, 0.07), off(head, 0.02, 0.12), '#2a2c33', 1);
+  L(off(head, -0.07, 0.12), off(head, 0.03, 0.16), '#2a2c33', 1);
+  L(off(head, -0.04, -0.01), off(head, 0.04, -0.01), OUTLINE, 1);
+  L(off(head, 0.04, -0.01), off(head, 0.12, -0.02), '#e8432e', 2);
 }
 
 const GRADE_BARS = ['#ffd84d', '#ffb347', '#ff8a3d', '#ff6a4a', '#ff5a5a'];
 
+// Mountain range behind the title: [peak x, peak y, half-width at the base]
+const PEAKS = [[W / 2 - 62, 14, 24], [W / 2 - 26, 6, 32], [W / 2 + 16, 2, 38], [W / 2 + 58, 11, 28]];
+const PEAK_BASE = 36;
+function drawPeaks(c) {
+  for (const [px, top, half] of PEAKS) {
+    for (let y = top; y < PEAK_BASE; y++) {
+      const w = Math.round(((y - top) / (PEAK_BASE - top)) * half);
+      rect(c, px - w - 1, y, 2 * w + 3, 1, NAVY_EDGE);
+    }
+  }
+  for (const [px, top, half] of PEAKS) {
+    for (let y = top + 1; y < PEAK_BASE; y++) {
+      const w = Math.round(((y - top) / (PEAK_BASE - top)) * half);
+      rect(c, px - w, y, 2 * w + 1, 1, '#2f3a5c');
+      // Sunlit snow on the right face, ragged along its lower edge
+      const snow = Math.round(w * 0.75) - Math.max(0, y - top - 9 - (hash(px + y) % 3)) * 2;
+      if (snow > 0) rect(c, px + w - snow + 1, y, snow, 1, '#f6e3b0');
+    }
+  }
+}
+
+const HEART = ['0110110', '1111111', '1111111', '0111110', '0011100', '0001000'];
+
 function drawHud(c, state, course) {
-  label('MONTENEGRO', W / 2, 36, 30, '#f5a623', 'center', '#1a1208');
-  label('GRAVEL', W / 2, 54, 16, '#f6e3b0', 'center', '#1a1208');
+  drawPeaks(c);
+  label('MONTENEGRO', W / 2, 44, 28, ['#ffd257', '#f0861a'], 'center', '#1a1208');
+  label('GRAVEL', W / 2, 59, 14, '#f6e3b0', 'center', '#1a1208');
 
   panel(c, 8, 64, W - 16, 42, NAVY_EDGE);
   panel(c, 9, 65, W - 18, 40, NAVY);
   rect(c, 88, 70, 1, 30, '#3a4257');
   rect(c, 192, 70, 1, 30, '#3a4257');
 
-  label('SPEED', 15, 76, 7, MUTED);
-  label((state.v * 3.6).toFixed(1), 15, 94, 16);
-  label('km/h', 84, 94, 7, MUTED, 'right');
+  // Speedometer icon
+  ring(c, 20, 76, 5, 1, '#fff', Math.PI, TAU);
+  line(c, 20, 76, 23, 73, '#fff');
+  label('SPEED', 29, 77, 7, MUTED);
+  label((state.v * 3.6).toFixed(1), 15, 96, 16);
+  label('km/h', 84, 96, 7, MUTED, 'right');
 
-  label('STAMINA', 95, 76, 7, MUTED);
-  rect(c, 95, 80, 92, 9, NAVY_EDGE);
+  HEART.forEach((row, j) => {
+    for (let i = 0; i < row.length; i++) if (row[i] === '1') rect(c, 95 + i, 71 + j, 1, 1, '#ff4d5e');
+  });
+  rect(c, 96, 72, 1, 1, '#ffb0b8');
+  label('STAMINA', 106, 77, 7, MUTED);
+  panel(c, 94, 80, 94, 11, '#56607c');
+  panel(c, 95, 81, 92, 9, NAVY_EDGE);
   const s = state.stamina / 100;
   const sColor = state.bonked ? '#ff5a5a' : s > 0.5 ? '#5dff7a' : s > 0.25 ? '#ffd84d' : '#ff8a3d';
-  rect(c, 96, 81, Math.round(90 * s), 7, sColor);
-  rect(c, 96, 81, Math.round(90 * s), 2, 'rgba(255,255,255,0.35)');
+  rect(c, 96, 82, Math.round(90 * s), 7, sColor);
+  rect(c, 96, 82, Math.round(90 * s), 2, 'rgba(255,255,255,0.35)');
   const rpm = Math.round(rawCadence(state) * 60);
-  label(`${rpm} rpm  ${Math.round(state.power)} W`, 95, 100, 7, MUTED);
-  label(`${Math.round(state.stamina)}%`, 187, 100, 7, '#fff', 'right');
+  label(`${rpm} rpm  ${Math.round(state.power)} W`, 95, 101, 7, MUTED);
+  label(`${Math.round(state.stamina)}%`, 187, 101, 7, '#fff', 'right');
 
   const grade = course.gradeAt(state.x) * 100;
   const gColor = grade > 6 ? '#ff5a5a' : grade > 2 ? '#ffd84d' : grade < -2 ? '#6fc3ff' : '#fff';
-  label('GRADIENT', W - 15, 76, 7, MUTED, 'right');
-  label(`${grade.toFixed(0)}%`, W - 15, 94, 14, gColor, 'right');
+  // Mountain icon
+  for (let j = 0; j < 6; j++) {
+    rect(c, 203 - j, 71 + j, 2 * j + 1, 1, j < 2 ? '#fff' : MUTED);
+    if (j > 1) rect(c, 209 - (j - 2), 71 + j, 2 * (j - 2) + 1, 1, MUTED);
+  }
+  label('GRADIENT', W - 15, 77, 7, MUTED, 'right');
+  label(`${grade.toFixed(0)}%`, W - 15, 96, 14, gColor, 'right');
   // Bar chart icon, more bars lit the steeper it gets
   const lit = Math.max(0, Math.min(5, Math.ceil(grade / 2.5)));
   for (let i = 0; i < 5; i++) {
-    rect(c, 198 + i * 4, 93 - i * 2, 3, 3 + i * 2, i < lit ? GRADE_BARS[i] : '#3a4257');
+    rect(c, 198 + i * 4, 95 - i * 2, 3, 3 + i * 2, i < lit ? GRADE_BARS[i] : '#3a4257');
   }
 
   // Course profile with a position marker, so climbs can be anticipated
@@ -348,13 +462,25 @@ function buildControlsBase() {
     line(c, cx + ax * (r - 9), cy + ay * (r - 9), cx + ax * (r + 1), cy + ay * (r + 1), NAVY, 2);
   }
 
+  // Rays over the sweet spot
+  for (const k of [-1, 0, 1]) {
+    const a = top + k * 0.2;
+    const ax = Math.cos(a);
+    const ay = Math.sin(a);
+    line(c, cx + ax * (r + 8), cy + ay * (r + 8), cx + ax * (r + 11), cy + ay * (r + 11), '#5dff7a', 2);
+  }
+
   panel(c, 66, 459, 116, 14, '#2f8f45');
   panel(c, 67, 460, 114, 12, '#12301c');
 
   const p = UI.pedal;
+  disc(c, p.cx, p.cy, p.r + 1, NAVY_EDGE);
   disc(c, p.cx, p.cy, p.r, '#6e1414');
   disc(c, p.cx, p.cy, p.r - 3, '#d93636');
-  ring(c, p.cx, p.cy, p.r - 6, 2, '#f06a5a');
+  disc(c, p.cx, p.cy + 2, p.r - 7, '#c42c2c');
+  disc(c, p.cx, p.cy, p.r - 8, '#e04a40');
+  ring(c, p.cx, p.cy, p.r - 4, 2, '#ff8f7d', Math.PI * 1.1, Math.PI * 1.9);
+  ring(c, p.cx, p.cy, p.r - 4, 1, '#f06a5a');
   return canvas;
 }
 
@@ -381,13 +507,24 @@ function drawControls(c, state, pressed) {
   const a = -Math.PI / 2 + (state.crank % 1) * TAU;
   const ax = Math.cos(a);
   const ay = Math.sin(a);
-  ring(c, cx, cy, 15, 3, '#8a8d94');
-  for (let k = 0; k < 12; k++) {
-    const t = a + (k * TAU) / 12;
-    disc(c, cx + Math.cos(t) * 16, cy + Math.sin(t) * 16, 1, '#8a8d94');
+  // Chainring with a crank arm and pedal pointing at the dot
+  for (let k = 0; k < 16; k++) {
+    const t = a + (k * TAU) / 16;
+    disc(c, cx + Math.cos(t) * 19, cy + Math.sin(t) * 19, 1, '#9a9da4');
   }
-  line(c, cx, cy, cx + ax * 26, cy + ay * 26, '#c8ccd4', 5);
-  disc(c, cx, cy, 4, '#55585e');
+  ring(c, cx, cy, 18, 4, '#9a9da4');
+  ring(c, cx, cy, 15, 1, '#5d6068');
+  for (let k = 0; k < 5; k++) {
+    const t = a + ((k + 0.5) * TAU) / 5;
+    line(c, cx, cy, cx + Math.cos(t) * 14, cy + Math.sin(t) * 14, '#6d7078', 3);
+  }
+  line(c, cx, cy, cx + ax * 27, cy + ay * 27, NAVY_EDGE, 7);
+  line(c, cx, cy, cx + ax * 27, cy + ay * 27, '#d4d8e0', 5);
+  line(c, cx, cy, cx + ax * 25, cy + ay * 25, '#a4a8b2', 2);
+  disc(c, cx, cy, 5, NAVY_EDGE);
+  disc(c, cx, cy, 4, '#6d7078');
+  disc(c, cx, cy, 1, '#d4d8e0');
+  disc(c, cx + ax * 27, cy + ay * 27, 2, '#3a3d44');
   disc(c, cx + ax * (r - 4.5), cy + ay * (r - 4.5), 6, NAVY_EDGE);
   disc(c, cx + ax * (r - 4.5), cy + ay * (r - 4.5), 5, state.coasting ? '#7d8599' : '#fff');
 
@@ -399,7 +536,14 @@ function drawControls(c, state, pressed) {
 
   const p = UI.pedal;
   if (pressed.pedal > 0) disc(c, p.cx, p.cy, p.r - 9, '#ff8a8a');
-  label('PEDAL', p.cx, p.cy + 6, 15, '#fff', 'center', '#6e1414');
+  // Crank icon
+  line(c, p.cx - 9, p.cy - 22, p.cx + 6, p.cy - 8, '#6e1414', 7);
+  line(c, p.cx - 9, p.cy - 22, p.cx + 6, p.cy - 8, '#fff', 5);
+  disc(c, p.cx + 6, p.cy - 8, 5, '#6e1414');
+  disc(c, p.cx + 6, p.cy - 8, 4, '#fff');
+  disc(c, p.cx + 6, p.cy - 8, 2, '#d93636');
+  disc(c, p.cx - 9, p.cy - 22, 1, '#d93636');
+  label('PEDAL', p.cx, p.cy + 18, 14, '#fff', 'center', '#6e1414');
 }
 
 function drawFinish(c, state, best) {
@@ -415,8 +559,9 @@ function drawFinish(c, state, best) {
 export function draw(c, out, state, course, pressed, best) {
   labels.length = 0;
   rect(c, 0, 0, W, H, '#3f7d38');
-  backdrop.draw(c, state.x * PPM * PARALLAX);
-  drawRoad(c, state, course);
+  const progress = Math.min(1, Math.max(0, state.x / course.length));
+  backdrop.draw(c, progress);
+  drawRoad(c, state, course, backdrop.at(progress));
   drawRider(c, state, course);
   drawHud(c, state, course);
   drawControls(c, state, pressed);
@@ -437,7 +582,14 @@ export function draw(c, out, state, course, pressed, best) {
       out.strokeStyle = t.outline;
       out.strokeText(t.str, t.x, t.y);
     }
-    out.fillStyle = t.color;
+    if (Array.isArray(t.color)) {
+      const grad = out.createLinearGradient(0, t.y - t.size * 0.75, 0, t.y);
+      grad.addColorStop(0, t.color[0]);
+      grad.addColorStop(1, t.color[1]);
+      out.fillStyle = grad;
+    } else {
+      out.fillStyle = t.color;
+    }
     out.fillText(t.str, t.x, t.y);
   }
 }
