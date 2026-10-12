@@ -230,79 +230,65 @@ function drawRider(c, state, course) {
 
 const GRADE_BARS = ['#ffd84d', '#ffb347', '#ff8a3d', '#ff6a4a', '#ff5a5a'];
 
-// Mountain range behind the title: [peak x, peak y, half-width at the base]
-const PEAKS = [[W / 2 - 62, 14, 24], [W / 2 - 26, 6, 32], [W / 2 + 16, 2, 38], [W / 2 + 58, 11, 28]];
-const PEAK_BASE = 36;
-function drawPeaks(c) {
-  for (const [px, top, half] of PEAKS) {
-    for (let y = top; y < PEAK_BASE; y++) {
-      const w = Math.round(((y - top) / (PEAK_BASE - top)) * half);
-      rect(c, px - w - 1, y, 2 * w + 3, 1, NAVY_EDGE);
-    }
-  }
-  for (const [px, top, half] of PEAKS) {
-    for (let y = top + 1; y < PEAK_BASE; y++) {
-      const w = Math.round(((y - top) / (PEAK_BASE - top)) * half);
-      rect(c, px - w, y, 2 * w + 1, 1, '#2f3a5c');
-      // Sunlit snow on the right face, ragged along its lower edge
-      const snow = Math.round(w * 0.75) - Math.max(0, y - top - 9 - (hash(px + y) % 3)) * 2;
-      if (snow > 0) rect(c, px + w - snow + 1, y, snow, 1, '#f6e3b0');
-    }
-  }
+// The logo sits under the dashboard. Like the text, it is drawn at full device resolution.
+const LOGO = { src: 'assets/logo.webp', x: 79, y: 78, w: 112, h: 53 };
+let logo = null;
+{
+  const img = new Image();
+  img.onload = () => {
+    logo = img;
+  };
+  img.src = LOGO.src;
 }
 
 const HEART = ['0110110', '1111111', '1111111', '0111110', '0011100', '0001000'];
 
 function drawHud(c, state, course) {
-  drawPeaks(c);
-  label('MONTENEGRO', W / 2, 44, 28, ['#ffd257', '#f0861a'], 'center', '#1a1208');
-  label('GRAVEL', W / 2, 59, 14, '#f6e3b0', 'center', '#1a1208');
-
-  panel(c, 8, 64, W - 16, 42, NAVY_EDGE);
-  panel(c, 9, 65, W - 18, 40, NAVY);
-  rect(c, 88, 70, 1, 30, '#3a4257');
-  rect(c, 192, 70, 1, 30, '#3a4257');
+  panel(c, 8, 6, W - 16, 42, NAVY_EDGE);
+  panel(c, 9, 7, W - 18, 40, NAVY);
+  rect(c, 88, 12, 1, 30, '#3a4257');
+  rect(c, 192, 12, 1, 30, '#3a4257');
 
   // Speedometer icon
-  ring(c, 20, 76, 5, 1, '#fff', Math.PI, TAU);
-  line(c, 20, 76, 23, 73, '#fff');
-  label('SPEED', 29, 77, 7, MUTED);
-  label((state.v * 3.6).toFixed(1), 15, 96, 16);
-  label('km/h', 84, 96, 7, MUTED, 'right');
+  ring(c, 20, 18, 5, 1, '#fff', Math.PI, TAU);
+  line(c, 20, 18, 23, 15, '#fff');
+  label('SPEED', 29, 19, 7, MUTED);
+  label((state.v * 3.6).toFixed(1), 15, 38, 16);
+  label('km/h', 84, 38, 7, MUTED, 'right');
 
   HEART.forEach((row, j) => {
-    for (let i = 0; i < row.length; i++) if (row[i] === '1') rect(c, 95 + i, 71 + j, 1, 1, '#ff4d5e');
+    for (let i = 0; i < row.length; i++) if (row[i] === '1') rect(c, 95 + i, 13 + j, 1, 1, '#ff4d5e');
   });
-  rect(c, 96, 72, 1, 1, '#ffb0b8');
-  label('STAMINA', 106, 77, 7, MUTED);
-  panel(c, 94, 80, 94, 11, '#56607c');
-  panel(c, 95, 81, 92, 9, NAVY_EDGE);
+  rect(c, 96, 14, 1, 1, '#ffb0b8');
+  label('STAMINA', 106, 19, 7, MUTED);
+  panel(c, 94, 22, 94, 11, '#56607c');
+  panel(c, 95, 23, 92, 9, NAVY_EDGE);
   const s = state.stamina / 100;
   const sColor = state.bonked ? '#ff5a5a' : s > 0.5 ? '#5dff7a' : s > 0.25 ? '#ffd84d' : '#ff8a3d';
-  rect(c, 96, 82, Math.round(90 * s), 7, sColor);
-  rect(c, 96, 82, Math.round(90 * s), 2, 'rgba(255,255,255,0.35)');
+  rect(c, 96, 24, Math.round(90 * s), 7, sColor);
+  rect(c, 96, 24, Math.round(90 * s), 2, 'rgba(255,255,255,0.35)');
   const rpm = Math.round(rawCadence(state) * 60);
-  label(`${rpm} rpm  ${Math.round(state.power)} W`, 95, 101, 7, MUTED);
-  label(`${Math.round(state.stamina)}%`, 187, 101, 7, '#fff', 'right');
+  label(`${rpm} rpm  ${Math.round(state.power)} W`, 95, 43, 7, MUTED);
+  label(`${Math.round(state.stamina)}%`, 187, 43, 7, '#fff', 'right');
 
   const grade = course.gradeAt(state.x) * 100;
   const gColor = grade > 6 ? '#ff5a5a' : grade > 2 ? '#ffd84d' : grade < -2 ? '#6fc3ff' : '#fff';
   // Mountain icon
   for (let j = 0; j < 6; j++) {
-    rect(c, 203 - j, 71 + j, 2 * j + 1, 1, j < 2 ? '#fff' : MUTED);
-    if (j > 1) rect(c, 209 - (j - 2), 71 + j, 2 * (j - 2) + 1, 1, MUTED);
+    rect(c, 203 - j, 13 + j, 2 * j + 1, 1, j < 2 ? '#fff' : MUTED);
+    if (j > 1) rect(c, 209 - (j - 2), 13 + j, 2 * (j - 2) + 1, 1, MUTED);
   }
-  label('GRADIENT', W - 15, 77, 7, MUTED, 'right');
-  label(`${grade.toFixed(0)}%`, W - 15, 96, 14, gColor, 'right');
+  label('GRADIENT', W - 15, 19, 7, MUTED, 'right');
+  label(`${grade.toFixed(0)}%`, W - 15, 38, 14, gColor, 'right');
   // Bar chart icon, more bars lit the steeper it gets
   const lit = Math.max(0, Math.min(5, Math.ceil(grade / 2.5)));
   for (let i = 0; i < 5; i++) {
-    rect(c, 198 + i * 4, 95 - i * 2, 3, 3 + i * 2, i < lit ? GRADE_BARS[i] : '#3a4257');
+    rect(c, 198 + i * 4, 37 - i * 2, 3, 3 + i * 2, i < lit ? GRADE_BARS[i] : '#3a4257');
   }
 
   // Course profile with a position marker, so climbs can be anticipated
   const px = 8;
-  const py = 109;
+  const py = 51;
   const pw = W - 16;
   const ph = 24;
   panel(c, px, py, pw, ph, 'rgba(20,26,46,0.85)');
@@ -476,6 +462,11 @@ export function draw(c, out, state, course, pressed, best) {
 
   out.imageSmoothingEnabled = false;
   out.drawImage(c.canvas, 0, 0, W, H);
+  if (logo && !state.finished) {
+    out.imageSmoothingEnabled = true;
+    out.imageSmoothingQuality = 'high';
+    out.drawImage(logo, LOGO.x, LOGO.y, LOGO.w, LOGO.h);
+  }
   out.lineJoin = 'round';
   for (const t of labels) {
     out.font = `bold ${t.size}px ${FONT}`;
