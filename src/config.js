@@ -8,9 +8,9 @@ export const CFG = {
 
   // Gearing: metres travelled per crank revolution, spaced geometrically
   gears: 12,
-  devMin: 1.8,
+  devMin: 1.3,  // low enough that GOOD strokes still climb the steepest gradient
   devMax: 9.0,
-  startGear: 4,
+  startGear: 5,
 
   // Pedal stroke
   strokeEnergy: 200,  // joules from one perfect stroke
@@ -42,6 +42,6 @@ export const CFG = {
   strokeCost: 1.25,
   grindCost: 3,       // extra cost per stroke at zero cadence, scales down to 0 at grindBelow
   missCost: 2.5,
-  bonkFactor: 0.35,   // stroke energy multiplier while bonked
+  bonkFactor: 0.5,    // stroke energy multiplier while bonked; still a crawl up the steepest gradient
   bonkRecover: 20,    // stamina needed to recover from a bonk
 };
