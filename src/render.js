@@ -51,7 +51,7 @@ const VERGE = '#4f8a3a';
 // each frame copies it column by column at the height of the road. The verge is the
 // bottom band of the scene's painting, or plain grass until that has loaded.
 const STRIP_W = 9 * 128;
-const STRIP_H = 215;
+const STRIP_H = 217;
 const WALL_H = 17; // strip rows above the road surface row
 function buildRoadStrip(scene) {
   const canvas = document.createElement('canvas');
@@ -152,29 +152,89 @@ function drawRoad(c, state, course, scenes) {
     if (wx % 50 === 0 && wx > 0) label(`${wx}m`, sx + 1, y - 21, 7, '#fff', 'center', NAVY_EDGE);
   }
 
-  // Finish: a chequered line across the road under a banner on two posts, tall enough to
-  // ride through
-  const fx = screenX(course.length);
-  if (fx < W + 30) {
-    const fy = roadY(course.length);
-    for (let i = 0; i < 2; i++) {
-      for (let j = 0; j < 5; j++) rect(c, fx - 3 + i * 3, fy - 5 + j * 3, 3, 3, (i + j) % 2 ? '#111' : '#fff');
+  drawGateBack(c, gateAt(state, course));
+}
+
+// The finish gate is drawn at an angle, as if seen from a little before it: the near post
+// stands on the verge this side of the road, and the far post behind the wall and further
+// along, with the banner and the chequered line running between them.
+const GATE = { reach: 34, near: 11, far: -8, height: 132, banner: 24 };
+
+// Screen positions of the gate's two post bases, or null while it is out of sight
+function gateAt(state, course) {
+  const fx = Math.round(RIDER_X + (course.length - state.x) * PPM);
+  if (fx > W + GATE.reach + 10) return null;
+  const fy = Math.round(ROAD_Y - (course.heightAt(course.length) - course.heightAt(state.x)) * PPM * EXAG);
+  return { fx, fy, near: [fx - GATE.reach, fy + GATE.near], far: [fx + GATE.reach, fy + GATE.far] };
+}
+
+// Chequered post with red bands and a cap, standing on `baseY`
+function drawPost(c, x, baseY) {
+  const top = baseY - GATE.height;
+  rect(c, x - 3, top, 7, GATE.height, NAVY_EDGE);
+  for (let j = 0; j * 3 < GATE.height; j++) {
+    rect(c, x - 2, top + j * 3, 2, 3, j % 2 ? '#16161c' : '#f4f1e6');
+    rect(c, x, top + j * 3, 3, 3, j % 2 ? '#f4f1e6' : '#16161c');
+  }
+  rect(c, x - 2, top + 9, 5, 5, '#e23a2e');
+  rect(c, x - 2, baseY - 20, 5, 5, '#e23a2e');
+  rect(c, x - 4, top - 4, 9, 5, NAVY_EDGE);
+  rect(c, x - 3, top - 3, 7, 3, '#8a8f98');
+}
+
+// Everything the rider passes in front of: the line on the road, the far post, the banner
+function drawGateBack(c, gate) {
+  if (!gate) return;
+  const { fx, fy, near, far } = gate;
+  // The line crosses the gravel on the same slant as the gate
+  for (let y = fy - 5; y <= fy + 9; y++) {
+    const xc = near[0] + ((near[1] - 1 - y) / (near[1] - far[1])) * (far[0] - near[0]);
+    for (let k = 0; k < 3; k++) {
+      rect(c, xc + k * 3, y, 3, 1, (k + Math.floor((y - fy + 5) / 3)) % 2 ? '#16161c' : '#f4f1e6');
     }
-    const top = fy - 122;
-    for (const px of [fx - 23, fx + 20]) {
-      rect(c, px - 1, top, 5, 117, NAVY_EDGE);
-      rect(c, px, top + 1, 3, 116, '#c9ced8');
-      rect(c, px, top + 1, 1, 116, '#f4f6fb');
-    }
-    rect(c, fx - 25, top - 1, 50, 24, NAVY_EDGE);
-    rect(c, fx - 24, top, 48, 22, '#f4f6fb');
-    for (let i = 0; i < 12; i++) {
-      for (const [row, y] of [[0, top], [1, top + 4], [0, top + 14], [1, top + 18]]) {
-        if ((i + row) % 2) rect(c, fx - 24 + i * 4, y, 4, 4, '#111');
+  }
+
+  // The far post's foot is hidden by the wall
+  c.save();
+  c.beginPath();
+  c.rect(0, 0, W, fy - WALL_H);
+  c.clip();
+  drawPost(c, far[0], far[1]);
+  c.restore();
+
+  const x0 = near[0] + 4;
+  const x1 = far[0] - 4;
+  const y0 = near[1] - GATE.height + 5;
+  const y1 = far[1] - GATE.height + 5;
+  const ends = 10;
+  for (let sx = x0; sx <= x1; sx++) {
+    const y = Math.round(y0 + ((y1 - y0) * (sx - x0)) / (x1 - x0));
+    rect(c, sx, y - 1, 1, GATE.banner + 2, NAVY_EDGE);
+    rect(c, sx, y, 1, GATE.banner, '#f6efe0');
+    const i = sx - x0;
+    if (i < ends || i > x1 - x0 - ends) {
+      for (let j = 0; j < GATE.banner; j += 4) {
+        if (((i >> 2) + (j >> 2)) % 2) rect(c, sx, y + j, 1, 4, '#16161c');
       }
     }
-    label('FINISH', fx, top + 13.5, 6, NAVY, 'center').stay = true;
   }
+  rect(c, x0 - 1, y0 - 1, 1, GATE.banner + 2, NAVY_EDGE);
+  rect(c, x1 + 1, y1 - 1, 1, GATE.banner + 2, NAVY_EDGE);
+  const text = label('FINISH', fx, (y0 + y1) / 2 + GATE.banner / 2 + 3, 9, '#e23a2e', 'center', '#4a0f0b');
+  text.angle = Math.atan2(y1 - y0, x1 - x0);
+  text.stay = true;
+}
+
+// The near post, which the rider passes behind, on a stone foot in the grass
+function drawGateFront(c, gate) {
+  if (!gate) return;
+  const [x, y] = gate.near;
+  drawPost(c, x, y);
+  rect(c, x - 7, y - 6, 15, 8, NAVY_EDGE);
+  rect(c, x - 6, y - 5, 13, 6, '#8a8f98');
+  rect(c, x - 6, y - 5, 13, 1, '#b4b9c2');
+  rect(c, x - 9, y - 1, 3, 3, '#3c7030');
+  rect(c, x + 7, y - 2, 3, 4, '#4f8a3a');
 }
 
 // The rider is a sheet of frames, all the same size with the bike in the same place. They
@@ -502,6 +562,7 @@ export function draw(c, out, state, course, pressed, best) {
   backdrop.draw(c, progress, state.x * PPM * MID_PARALLAX, ROAD_Y + 50);
   drawRoad(c, state, course, backdrop.at(progress));
   drawRider(c, state, course);
+  drawGateFront(c, gateAt(state, course));
   drawHud(c, state, course);
   drawControls(c, state, pressed);
   if (state.finished) {
@@ -523,21 +584,26 @@ export function draw(c, out, state, course, pressed, best) {
   }
   out.lineJoin = 'round';
   for (const t of labels) {
+    // Each label is drawn from its own origin, so one with an `angle` can be turned about it
+    out.save();
+    out.translate(t.x, t.y);
+    if (t.angle) out.rotate(t.angle);
     out.font = `bold ${t.size}px ${FONT}`;
     out.textAlign = t.align;
     if (t.outline) {
       out.lineWidth = Math.max(1.5, t.size / 5);
       out.strokeStyle = t.outline;
-      out.strokeText(t.str, t.x, t.y);
+      out.strokeText(t.str, 0, 0);
     }
     if (Array.isArray(t.color)) {
-      const grad = out.createLinearGradient(0, t.y - t.size * 0.75, 0, t.y);
+      const grad = out.createLinearGradient(0, -t.size * 0.75, 0, 0);
       grad.addColorStop(0, t.color[0]);
       grad.addColorStop(1, t.color[1]);
       out.fillStyle = grad;
     } else {
       out.fillStyle = t.color;
     }
-    out.fillText(t.str, t.x, t.y);
+    out.fillText(t.str, 0, 0);
+    out.restore();
   }
 }

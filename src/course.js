@@ -1,16 +1,16 @@
 // A course is a list of [length in metres, gradient] segments.
 const SEGMENTS = [
-  [60, 0],
-  [90, 0.04],
-  [50, 0],
-  [120, 0.08],
-  [40, 0.02],
-  [80, -0.06],
-  [60, 0],
-  [100, 0.11],
-  [30, 0.03],
-  [130, -0.08],
-  [60, 0],
+  [40, 0],
+  [55, 0.04],
+  [30, 0],
+  [75, 0.08],
+  [25, 0.02],
+  [50, -0.06],
+  [35, 0],
+  [65, 0.11],
+  [20, 0.03],
+  [80, -0.08],
+  [45, 0],
 ];
 
 const SMOOTH = 15; // metres either side used to round off gradient changes

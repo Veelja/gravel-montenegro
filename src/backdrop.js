@@ -5,19 +5,24 @@ import { rect, disc, hash } from './pix.js';
 // bottom band is handed to the road renderer, which scrolls it past as the near verge.
 // Until a painting has loaded, a code-drawn placeholder stands in.
 // Optional per scene:
+//   near   bottom fraction of the painting used as the verge (default NEAR); smaller where
+//          the default would reach up into water
+//   nearW  verge tile width (default NEAR_W); the wider size makes a shallow band tall
+//          enough to fill the screen below the road
 //   pines  give the middle-distance layer pointed crowns instead of rounded ones
 //   tint   multiply the road by this colour
 const SCENES = [
   { image: 'assets/bg/sveti-stefan.webp', from: 0, ground: '#3c6a2c' },
   { image: 'assets/bg/lovcen.webp', from: 0.24, ground: '#3c6a2c' },
-  { image: 'assets/bg/durmitor.webp', from: 0.52, ground: '#3c6a2c', pines: true },
+  { image: 'assets/bg/durmitor.webp', from: 0.52, ground: '#3c6a2c', pines: true, near: 0.25, nearW: 576 },
   // Night: the road is tinted to match
-  { image: 'assets/bg/podgorica.webp', from: 0.78, ground: '#161c30', tint: '#6f78b4' },
+  { image: 'assets/bg/podgorica.webp', from: 0.78, ground: '#161c30', tint: '#6f78b4', near: 0.3 },
 ];
 const FADE = 0.02;   // fraction of the course over which one scene fades into the next
 const ZOOM = 1.1;    // paintings are drawn at least this much oversize, leaving room to pan
 const NEAR = 0.36;   // bottom fraction of a painting used as the verge
-const NEAR_W = 288;  // verge tile width; mirrored, it divides the road strip exactly
+const NEAR_W = 288;  // verge tile width; mirrored, this or twice it divides the road strip exactly
+const NEAR_H = 190;  // verge tile height: enough to reach the bottom of the screen
 const MID = 0.22;    // fraction of a painting's height reused as the middle-distance layer
 const MID_H = 113;   // height of that layer on screen
 const CANOPY = 34;   // tallest crown of its silhouette, in pixels
@@ -183,9 +188,18 @@ function load(scene, w, h) {
     const [far, fc] = canvas(Math.round(img.width * k), h);
     fc.drawImage(img, 0, (h - img.height * k) / 3, far.width, img.height * k);
 
-    const sy = img.height * (1 - NEAR);
-    const [near, nc] = canvas(NEAR_W, Math.round((NEAR_W * img.height * NEAR) / img.width));
-    nc.drawImage(img, 0, sy, img.width, img.height - sy, 0, 0, near.width, near.height);
+    const nearSize = scene.near ?? NEAR;
+    const nearW = scene.nearW ?? NEAR_W;
+    const sy = img.height * (1 - nearSize);
+    const bandH = Math.round((nearW * img.height * nearSize) / img.width);
+    const [near, nc] = canvas(nearW, NEAR_H);
+    nc.drawImage(img, 0, sy, img.width, img.height - sy, 0, 0, nearW, bandH);
+    if (bandH < NEAR_H) {
+      // Too shallow to reach the bottom of the screen: carry on with its reflection
+      nc.translate(0, 2 * bandH);
+      nc.scale(1, -1);
+      nc.drawImage(near, 0, 0, nearW, bandH, 0, 0, nearW, bandH);
+    }
 
     // Middle distance: the top of the verge band again, a shade darker and with a treeline
     // cut along its top, to stand behind the road and drift past slower than it
