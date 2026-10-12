@@ -14,7 +14,7 @@ const ROAD_Y = 335;      // screen row where the wheels touch the road
 const TAU = Math.PI * 2;
 
 export const UI = {
-  gear: { x: 11, y: 352, w: 50, h: 106 },
+  gear: { x: 6, y: 345, w: 58, h: 118 },
   ring: { cx: 124, cy: 402, r: 42 },
   pedal: { cx: 222, cy: 404, r: 42 },
 };
@@ -335,10 +335,6 @@ function buildControlsBase() {
   canvas.height = H;
   const c = canvas.getContext('2d');
 
-  const g = UI.gear;
-  panel(c, g.x, g.y, g.w, g.h, NAVY_EDGE);
-  panel(c, g.x + 1, g.y + 1, g.w - 2, g.h - 2, NAVY);
-  rect(c, 24, 363, 2, 83, NAVY_EDGE);
 
   const { cx, cy, r } = UI.ring;
   const top = -Math.PI / 2;
@@ -381,24 +377,32 @@ function drawControls(c, state, pressed) {
   controlsBase ??= buildControlsBase();
   c.drawImage(controlsBase, 0, 0);
 
-  // Gear slider: one point per gear, hardest at the top and widening like a volume wedge
+  // Gear slider: one point per gear, hardest at the top and widening like a volume wedge.
+  // It has no panel behind it, so every piece carries its own dark outline.
+  const gx = 28;
+  const pipY = (gear) => 450 - (gear - 1) * 9;
   for (let gear = 1; gear <= CFG.gears; gear++) {
-    const y = 441 - (gear - 1) * 7;
-    const w = 8 + Math.round(((gear - 1) * 10) / (CFG.gears - 1));
+    const y = pipY(gear);
+    const w = 12 + Math.round(((gear - 1) * 20) / (CFG.gears - 1));
     if (gear === state.gear) {
-      panel(c, 25 - w / 2 - 3, y - 2, w + 6, 8, NAVY_EDGE);
-      panel(c, 25 - w / 2 - 2, y - 1, w + 4, 6, '#fff');
+      panel(c, gx - w / 2 - 4, y - 3, w + 8, 11, NAVY_EDGE);
+      panel(c, gx - w / 2 - 3, y - 2, w + 6, 9, '#fff');
     } else {
-      rect(c, 25 - w / 2, y, w, 4, gear < state.gear ? '#8fa3d9' : '#3a4257');
+      rect(c, gx - w / 2 - 1, y - 1, w + 2, 7, NAVY_EDGE);
+      rect(c, gx - w / 2, y, w, 5, gear < state.gear ? '#ffd257' : '#7d879e');
     }
   }
-  const plus = pressed.plus > 0 ? '#5dff7a' : MUTED;
-  const minus = pressed.minus > 0 ? '#5dff7a' : MUTED;
-  rect(c, 44, 368, 9, 3, plus);
-  rect(c, 47, 365, 3, 9, plus);
-  rect(c, 44, 441, 9, 3, minus);
-  label('GEAR', 48, 400, 6, MUTED, 'center');
-  label(`${state.gear}`, 48, 416, 15, '#fff', 'center');
+  const mark = (y, on, isPlus) => {
+    rect(c, 51, y - 1, 11, 5, NAVY_EDGE);
+    if (isPlus) rect(c, 54, y - 4, 5, 11, NAVY_EDGE);
+    rect(c, 52, y, 9, 3, on ? '#5dff7a' : '#fff');
+    if (isPlus) rect(c, 55, y - 3, 3, 9, on ? '#5dff7a' : '#fff');
+  };
+  mark(350, pressed.plus > 0, true);
+  mark(456, pressed.minus > 0, false);
+  // The gear number rides beside the knob
+  const ny = Math.min(444, Math.max(372, pipY(state.gear) + 8));
+  label(`${state.gear}`, 57, ny, 15, '#fff', 'center', NAVY_EDGE);
 
   // Timing ring: the dot is the pedal, and whole crank revolutions put it at the top
   const { cx, cy, r } = UI.ring;
