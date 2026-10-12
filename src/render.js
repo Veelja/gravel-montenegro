@@ -15,7 +15,7 @@ const MID_PARALLAX = 0.28; // scroll speed of the middle-distance hedge relative
 const TAU = Math.PI * 2;
 
 export const UI = {
-  gear: { x: 0, y: 285, w: 78, h: 195, step: 14 }, // step: pixels from one gear's point to the next
+  gear: { x: 0, y: 262, w: 78, h: 218, step: 16 }, // step: pixels from one gear's point to the next
   ring: { cx: 124, cy: 402, r: 42 },
   pedal: { cx: 222, cy: 404, r: 42 },
 };
@@ -486,30 +486,36 @@ function drawControls(c, state, pressed) {
   const gx = 4;
   const barW = (gear) => 24 + Math.round(((gear - 1) * 40) / (CFG.gears - 1));
   const pipY = (gear) => 458 - (gear - 1) * UI.gear.step;
-  c.globalAlpha = 0.55;
   for (let gear = 1; gear <= CFG.gears; gear++) {
     if (gear === state.gear) continue;
     const y = pipY(gear);
     const w = barW(gear);
-    rect(c, gx - 1, y - 1, w + 2, 12, NAVY_EDGE);
-    rect(c, gx, y, w, 10, gear < state.gear ? '#ffd257' : '#aab2c8');
+    // A solid frame round a see-through fill
+    c.globalAlpha = 0.85;
+    rect(c, gx - 2, y - 2, w + 4, 2, NAVY_EDGE);
+    rect(c, gx - 2, y + 8, w + 4, 2, NAVY_EDGE);
+    rect(c, gx - 2, y, 2, 8, NAVY_EDGE);
+    rect(c, gx + w, y, 2, 8, NAVY_EDGE);
+    c.globalAlpha = 0.55;
+    rect(c, gx, y, w, 8, gear < state.gear ? '#ffd257' : '#aab2c8');
   }
+  c.globalAlpha = 0.85;
   const mark = (y, on, isPlus) => {
     rect(c, gx, y - 1, 11, 5, NAVY_EDGE);
     if (isPlus) rect(c, gx + 3, y - 4, 5, 11, NAVY_EDGE);
     rect(c, gx + 1, y, 9, 3, on ? '#5dff7a' : '#fff');
     if (isPlus) rect(c, gx + 4, y - 3, 3, 9, on ? '#5dff7a' : '#fff');
   };
-  mark(pipY(CFG.gears) - 10, pressed.plus > 0, true);
-  mark(pipY(1) + 15, pressed.minus > 0, false);
+  mark(pipY(CFG.gears) - 11, pressed.plus > 0, true);
+  mark(pipY(1) + 14, pressed.minus > 0, false);
   c.globalAlpha = 0.9;
   const ky = pipY(state.gear);
   const kw = barW(state.gear);
-  panel(c, gx - 2, ky - 3, kw + 8, 16, NAVY_EDGE);
-  panel(c, gx - 1, ky - 2, kw + 6, 14, '#fff');
+  panel(c, gx - 3, ky - 4, kw + 10, 16, NAVY_EDGE);
+  panel(c, gx - 1, ky - 2, kw + 6, 12, '#fff');
   c.globalAlpha = 1;
   // The gear number rides beside the knob
-  label(`${state.gear}`, gx + kw + 16, ky + 11, 16, '#fff', 'center', NAVY_EDGE);
+  label(`${state.gear}`, gx + kw + 17, ky + 10, 16, '#fff', 'center', NAVY_EDGE);
 
   // Timing ring: the dot is the pedal, and whole crank revolutions put it at the top
   const { cx, cy, r } = UI.ring;
