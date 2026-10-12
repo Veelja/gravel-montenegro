@@ -8,7 +8,6 @@ export const W = 270;
 export const H = 480;
 
 const PPM = 48;          // pixels per metre
-const RIDER_PPM = 58;    // the rider is drawn a little larger than life
 const EXAG = 2.5;        // vertical exaggeration so gradients read on screen
 const RIDER_X = 104;
 const ROAD_Y = 335;      // screen row where the wheels touch the road
@@ -26,8 +25,6 @@ const NAVY = '#141a2e';
 const NAVY_EDGE = '#0a0e1c';
 const MUTED = '#9aa6c4';
 const KIND_COLOR = { perfect: '#5dff7a', good: '#ffd84d', weak: '#ff9a3d', miss: '#ff5a5a' };
-
-const OUTLINE = '#14141a';
 
 const backdrop = createBackdrop(W, H);
 
@@ -164,165 +161,61 @@ function drawRoad(c, state, course, scenes) {
   }
 }
 
-const WHEEL_R = 20;
-function drawWheel(c, cx, cy, angle, rear) {
-  // Knobbly tyre, tan sidewall, dark rim
-  for (let k = 0; k < 18; k++) {
-    const a = angle + (k * TAU) / 18;
-    disc(c, cx + Math.cos(a) * (WHEEL_R + 0.5), cy + Math.sin(a) * (WHEEL_R + 0.5), 1, OUTLINE);
-  }
-  ring(c, cx, cy, WHEEL_R, 2, OUTLINE);
-  ring(c, cx, cy, WHEEL_R - 2, 2, '#e08a2c');
-  ring(c, cx, cy, WHEEL_R - 4, 1, '#2a2a2e');
-  for (let k = 0; k < 5; k++) {
-    const a = angle + (k * Math.PI) / 5;
-    const dx = Math.cos(a) * (WHEEL_R - 5);
-    const dy = Math.sin(a) * (WHEEL_R - 5);
-    line(c, cx - dx, cy - dy, cx + dx, cy + dy, '#3d3f45');
-  }
-  if (rear) {
-    // Cassette
-    disc(c, cx, cy, 5, '#8a6418');
-    disc(c, cx, cy, 4, '#d9a53a');
-    ring(c, cx, cy, 3, 1, '#8a6418');
-  } else {
-    // Brake rotor
-    ring(c, cx, cy, 6, 1, '#b9bcc2');
-  }
-  disc(c, cx, cy, 1, OUTLINE);
+// The rider is a sheet of frames covering one turn of the cranks, starting with the near
+// pedal at the top. Every frame is the same size with the bike in the same place.
+const SPRITE = {
+  src: 'assets/rider.webp',
+  frames: 14,
+  w: 260,
+  h: 230,
+  hub: [56, 170],    // rear hub within a frame
+  wheelbase: 146.8,
+  wheelR: 56,        // hub to the bottom of the tyre
+  spokeR: 40,
+};
+const RIDER_WHEELBASE = 78; // on screen, in buffer pixels
+
+let riderSheet = null;
+{
+  const img = new Image();
+  img.onload = () => {
+    riderSheet = img;
+  };
+  img.src = SPRITE.src;
 }
 
-const FRAME = '#8d9440';
-const JERSEY = '#c8362b';
-const SKIN = '#e0a57c';
-const SHORTS = '#1b1c22';
-
-// Bike and rider are laid out in metres (x forward, y up, origin on the road between the
-// wheels) and rotated to the slope point by point, which keeps every pixel crisp.
+// Drawn with the midpoint between the tyre contact patches on the road, tilted to the slope
 function drawRider(c, state, course) {
-  const tilt = Math.atan(course.gradeAt(state.x) * EXAG);
-  const cos = Math.cos(tilt);
-  const sin = Math.sin(tilt);
-  const P = ([x, y]) => [
-    RIDER_X + RIDER_PPM * (x * cos - y * sin),
-    ROAD_Y - RIDER_PPM * (x * sin + y * cos),
-  ];
-  const L = (a, b, color, t) => line(c, ...P(a), ...P(b), color, t);
-  const D = (a, r, color) => disc(c, ...P(a), r, color);
-  // Segments [from, to, colour, thickness] sharing one dark outline, so joints stay clean
-  const G = (...segs) => {
-    for (const [a, b, , t] of segs) L(a, b, OUTLINE, t + 2);
-    for (const [a, b, color, t] of segs) L(a, b, color, t);
-  };
-  const mix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
-  const off = (a, dx, dy) => [a[0] + dx, a[1] + dy];
+  if (!riderSheet) return;
+  const { w, h, hub, wheelbase, wheelR, spokeR } = SPRITE;
+  const k = RIDER_WHEELBASE / wheelbase;
+  const frame = Math.floor(mod(state.crank, 1) * SPRITE.frames);
 
-  const rear = [-0.52, 0.35];
-  const front = [0.52, 0.35];
-  const bb = [-0.08, 0.29];
-  const seat = [-0.25, 0.8];
-  const headTop = [0.36, 0.86];
-  const headBottom = [0.39, 0.7];
-  const hand = [0.5, 0.9];
+  c.save();
+  c.translate(RIDER_X, ROAD_Y);
+  c.rotate(-Math.atan(course.gradeAt(state.x) * EXAG));
+  c.scale(k, k);
+  c.translate(-hub[0] - wheelbase / 2, -hub[1] - wheelR);
 
-  // Out of the saddle while pushing a heavy gear
-  const standing = state.pushing && rawCadence(state) < CFG.grindBelow * 0.8;
-  const hip = standing ? [-0.12, 1.02] : [-0.23, 0.96];
-  const shoulder = standing ? [0.3, 1.33] : [0.2, 1.3];
-  const head = [shoulder[0] + 0.11, shoulder[1] + 0.16];
-
-  const a = state.crank * TAU;
-  const pedalAt = (ang) => [bb[0] + 0.17 * Math.sin(ang), bb[1] + 0.17 * Math.cos(ang)];
-  const nearPedal = pedalAt(a);
-  const farPedal = pedalAt(a + Math.PI);
-
-  const leg = (foot, shorts, skin, sock) => {
-    const len = 0.44;
-    const dx = foot[0] - hip[0];
-    const dy = foot[1] - hip[1];
-    const d = Math.min(Math.hypot(dx, dy), 2 * len - 0.001);
-    const bend = Math.sqrt(len * len - (d * d) / 4);
-    // Knee sits on the forward side of the hip-to-foot line
-    const nx = dy / d;
-    const ny = -dx / d;
-    const side = nx >= 0 ? 1 : -1;
-    const knee = [hip[0] + dx / 2 + nx * bend * side, hip[1] + dy / 2 + ny * bend * side];
-    G([knee, foot, skin, 4], [hip, knee, shorts, 6]);
-    L(mix(knee, foot, 0.72), foot, sock, 4);
-    L(off(foot, -0.05, 0), off(foot, 0.11, 0), OUTLINE, 4);
-  };
-
-  leg(farPedal, '#0e0f14', '#b07f5c', '#b9bcc2');
-  L(bb, farPedal, OUTLINE, 2);
-
+  // The painted spokes are faint and never move, so a few turning ones go behind them
   const spin = state.x / 0.35;
-  drawWheel(c, ...P(rear), spin, true);
-  drawWheel(c, ...P(front), spin, false);
+  c.strokeStyle = 'rgba(30,30,38,0.55)';
+  c.lineWidth = 1.5;
+  c.beginPath();
+  for (const hx of [hub[0], hub[0] + wheelbase]) {
+    for (let i = 0; i < 6; i++) {
+      const a = spin + (i * Math.PI) / 6;
+      const dx = Math.cos(a) * spokeR;
+      const dy = Math.sin(a) * spokeR;
+      c.moveTo(hx - dx, hub[1] - dy);
+      c.lineTo(hx + dx, hub[1] + dy);
+    }
+  }
+  c.stroke();
 
-  // Chain and rear derailleur
-  L(off(bb, 0, 0.08), off(rear, 0, 0.06), '#4a3c1c', 1);
-  L(off(bb, 0, -0.08), off(rear, 0.03, -0.14), '#4a3c1c', 1);
-  L(off(rear, 0.01, -0.04), off(rear, 0.03, -0.14), OUTLINE, 2);
-
-  G(
-    [rear, seat, FRAME, 2],
-    [rear, bb, FRAME, 2],
-    [headBottom, front, FRAME, 2],
-    [bb, seat, FRAME, 3],
-    [seat, headTop, FRAME, 3],
-    [bb, headBottom, FRAME, 3],
-    [headTop, headBottom, FRAME, 3],
-  );
-  // Bottle on the down tube
-  G([off(mix(bb, headBottom, 0.38), -0.04, 0.04), off(mix(bb, headBottom, 0.62), -0.04, 0.04), '#6f7a34', 3]);
-  // Seatpost, saddle with a tail light, and a bag slung under it
-  L(seat, [-0.27, 0.92], OUTLINE, 2);
-  L([-0.36, 0.85], [-0.3, 0.84], '#2b2e36', 5);
-  L([-0.4, 0.93], [-0.17, 0.93], OUTLINE, 3);
-  D([-0.41, 0.92], 1, '#ff4a3a');
-  // Stem and drop bars
-  L(headTop, [0.43, 0.93], OUTLINE, 2);
-  L([0.43, 0.93], [0.53, 0.92], OUTLINE, 3);
-  L([0.53, 0.92], [0.56, 0.84], OUTLINE, 2);
-  L([0.56, 0.84], [0.5, 0.79], OUTLINE, 2);
-  // Chainring
-  D(bb, 5, OUTLINE);
-  D(bb, 3, '#3a3d44');
-  D(bb, 1, '#9a9da4');
-
-  // Torso with a backpack on the back
-  const tx = shoulder[0] - hip[0];
-  const ty = shoulder[1] - hip[1];
-  const tl = Math.hypot(tx, ty);
-  const back = [(-ty / tl) * 0.12, (tx / tl) * 0.12];
-  const packLow = off(mix(hip, shoulder, 0.3), ...back);
-  const packHigh = off(mix(hip, shoulder, 0.82), ...back);
-  G([hip, shoulder, JERSEY, 11]);
-  L(off(hip, 0.04, -0.03), off(mix(hip, shoulder, 0.8), 0.07, -0.05), '#a52a22', 3);
-  G([packLow, packHigh, '#5c6b2e', 7]);
-  L(off(packLow, ...back.map((v) => v * 0.2)), off(packHigh, ...back.map((v) => v * 0.2)), '#7c8c42', 2);
-  D(hip, 5, OUTLINE);
-  D(hip, 4, SHORTS);
-
-  L(bb, nearPedal, OUTLINE, 4);
-  L(bb, nearPedal, '#6a6d75', 2);
-  leg(nearPedal, SHORTS, SKIN, '#f4f4f4');
-
-  const elbow = off(mix(shoulder, hand, 0.45), -0.03, -0.04);
-  G([elbow, hand, SKIN, 3], [shoulder, elbow, JERSEY, 5]);
-  D(hand, 3, OUTLINE);
-
-  // Head: helmet with vents, sunglasses
-  const lid = off(head, -0.02, 0.05);
-  D(head, 6, OUTLINE);
-  D(lid, 7, OUTLINE);
-  D(head, 5, SKIN);
-  D(lid, 6, '#f4f4f4');
-  D(off(head, 0.04, -0.04), 4, SKIN);
-  L(off(head, -0.1, 0.07), off(head, 0.02, 0.12), '#2a2c33', 1);
-  L(off(head, -0.07, 0.12), off(head, 0.03, 0.16), '#2a2c33', 1);
-  L(off(head, -0.04, -0.01), off(head, 0.04, -0.01), OUTLINE, 1);
-  L(off(head, 0.04, -0.01), off(head, 0.12, -0.02), '#e8432e', 2);
+  c.imageSmoothingQuality = 'high';
+  c.drawImage(riderSheet, frame * w, 0, w, h, 0, 0, w, h);
+  c.restore();
 }
 
 const GRADE_BARS = ['#ffd84d', '#ffb347', '#ff8a3d', '#ff6a4a', '#ff5a5a'];

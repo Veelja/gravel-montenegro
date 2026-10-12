@@ -31,5 +31,5 @@ drains stamina; too easy a gear spins out.
 - `src/config.js` - all tuning numbers
 - `src/course.js` - course segments (length and gradient)
 - `src/sim.js` - physics, strokes, gears, stamina
-- `src/render.js`, `src/pix.js` - pixel-art drawing
+- `src/render.js`, `src/pix.js` - pixel-art drawing; the rider is the sprite sheet `assets/rider.webp`
 - `src/backdrop.js` - scenery; one portrait painting per stage of the course, in `assets/bg/`
