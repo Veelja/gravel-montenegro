@@ -230,8 +230,9 @@ function drawRider(c, state, course) {
 
 const GRADE_BARS = ['#ffd84d', '#ffb347', '#ff8a3d', '#ff6a4a', '#ff5a5a'];
 
-// The logo sits under the dashboard. Like the text, it is drawn at full device resolution.
-const LOGO = { src: 'assets/logo.webp', x: 79, y: 78, w: 112, h: 53 };
+// The logo is a badge on the dashboard: beside the course profile, lapping over the empty
+// bottom corner of the stats panel. Like the text, it is drawn at full device resolution.
+const LOGO = { src: 'assets/logo.webp', x: 5, y: 43, w: 66, h: 31 };
 let logo = null;
 {
   const img = new Image();
@@ -287,9 +288,9 @@ function drawHud(c, state, course) {
   }
 
   // Course profile with a position marker, so climbs can be anticipated
-  const px = 8;
+  const px = 73;
   const py = 51;
-  const pw = W - 16;
+  const pw = W - 8 - px;
   const ph = 24;
   panel(c, px, py, pw, ph, 'rgba(20,26,46,0.85)');
   const span = Math.max(1, course.maxHeight - course.minHeight);
@@ -320,8 +321,8 @@ function drawHud(c, state, course) {
     hint = 'GRINDING - SHIFT DOWN -';
   }
   if (hint) {
-    panel(c, 40, 137, W - 80, 14, 'rgba(20,26,46,0.85)');
-    label(hint, W / 2, 147, 7, hintColor, 'center');
+    panel(c, 40, 79, W - 80, 14, 'rgba(20,26,46,0.85)');
+    label(hint, W / 2, 89, 7, hintColor, 'center');
   }
 }
 
