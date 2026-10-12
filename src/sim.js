@@ -134,8 +134,10 @@ export function pedal(state) {
     if (early <= 0.5) end = state.strokeEnd + 1;
   }
 
+  // A bonked rider has nothing left to spend, so tapping can't hold off the recovery
+  const spend = state.bonked ? 0 : 1;
   if (kind === 'miss') {
-    state.stamina -= CFG.missCost;
+    state.stamina -= CFG.missCost * spend;
   } else {
     const cad = rawCadence(state);
     // 1 at a standstill, 0 once the legs are turning at a comfortable cadence
@@ -155,7 +157,7 @@ export function pedal(state) {
     state.coasting = false;
     state.overrunTime = 0;
 
-    state.stamina -= CFG.strokeCost + CFG.grindCost * grind;
+    state.stamina -= (CFG.strokeCost + CFG.grindCost * grind) * spend;
   }
 
   if (state.stamina <= 0) {
