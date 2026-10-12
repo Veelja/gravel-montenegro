@@ -5,25 +5,12 @@ import { rect, disc, hash } from './pix.js';
 // bottom band is handed to the road renderer, which scrolls it past as the near verge.
 // Until a painting has loaded, a code-drawn placeholder stands in.
 // Optional per scene:
-//   near   bottom fraction of the painting used as the verge (default NEAR)
-//   hedge  [top, size] as fractions of the painting's height: the band reused as the
-//          middle-distance layer (default: the top of the verge band)
-//   pines  give that layer pointed crowns instead of rounded ones
-//   lift   raise that layer by this many pixels
+//   pines  give the middle-distance layer pointed crowns instead of rounded ones
 //   tint   multiply the road by this colour
 const SCENES = [
   { image: 'assets/bg/sveti-stefan.webp', from: 0, ground: '#3c6a2c' },
-  // Black Lake: the verge is the shallows, and the shoreline pines stand behind the road
-  {
-    image: 'assets/bg/durmitor.webp',
-    from: 0.24,
-    ground: '#a3b5a2',
-    near: 0.5,
-    hedge: [0.3, 0.2],
-    pines: true,
-    lift: 26,
-  },
-  { image: 'assets/bg/lovcen.webp', from: 0.52, ground: '#3c6a2c' },
+  { image: 'assets/bg/lovcen.webp', from: 0.24, ground: '#3c6a2c' },
+  { image: 'assets/bg/durmitor.webp', from: 0.52, ground: '#3c6a2c', pines: true },
   // Night: the road is tinted to match
   { image: 'assets/bg/podgorica.webp', from: 0.78, ground: '#161c30', tint: '#6f78b4' },
 ];
@@ -196,17 +183,15 @@ function load(scene, w, h) {
     const [far, fc] = canvas(Math.round(img.width * k), h);
     fc.drawImage(img, 0, (h - img.height * k) / 3, far.width, img.height * k);
 
-    const nearSize = scene.near ?? NEAR;
-    const sy = img.height * (1 - nearSize);
-    const [near, nc] = canvas(NEAR_W, Math.round((NEAR_W * img.height * nearSize) / img.width));
+    const sy = img.height * (1 - NEAR);
+    const [near, nc] = canvas(NEAR_W, Math.round((NEAR_W * img.height * NEAR) / img.width));
     nc.drawImage(img, 0, sy, img.width, img.height - sy, 0, 0, near.width, near.height);
 
-    // Middle distance: a band of the painting, a shade darker and with a treeline cut along
-    // its top, to stand behind the road and drift past slower than it
-    const [top, size] = scene.hedge ?? [1 - nearSize, MID];
-    const mk = Math.max(NEAR_W / img.width, MID_H / (img.height * size));
+    // Middle distance: the top of the verge band again, a shade darker and with a treeline
+    // cut along its top, to stand behind the road and drift past slower than it
+    const mk = Math.max(NEAR_W / img.width, MID_H / (img.height * MID));
     const [mid, mc] = canvas(Math.round(img.width * mk), MID_H);
-    mc.drawImage(img, 0, img.height * top, img.width, img.height * size, 0, 0, mid.width, MID_H);
+    mc.drawImage(img, 0, sy, img.width, img.height * MID, 0, 0, mid.width, MID_H);
     mc.fillStyle = 'rgba(8,14,30,0.22)';
     mc.fillRect(0, 0, mid.width, MID_H);
     cutCanopy(mc, mid.width, scene.pines);
@@ -244,7 +229,7 @@ export function createBackdrop(w, h) {
     const mw = scene.mid.width;
     // Half a tile out of step with the verge, which is cut from the same part of the painting
     let x = -((((Math.round(scroll) + mw / 4) % mw) + mw) % mw);
-    for (; x < w; x += mw) c.drawImage(scene.mid, x, baseY - (scene.lift ?? 0) - MID_H);
+    for (; x < w; x += mw) c.drawImage(scene.mid, x, baseY - MID_H);
   };
 
   // Scenes at `progress` (0..1 along the course): the one in view and, while it fades in,

@@ -31,8 +31,11 @@ const backdrop = createBackdrop(W, H);
 // Text is drawn at full device resolution on top of the pixel buffer, so it stays readable.
 // `color` may be a [top, bottom] pair for a vertical gradient.
 const labels = [];
+// Returns the label, so a caller can mark it `stay` to keep it on the finish screen.
 function label(str, x, y, size, color = '#fff', align = 'left', outline = null) {
-  labels.push({ str, x, y, size, color, align, outline });
+  const item = { str, x, y, size, color, align, outline };
+  labels.push(item);
+  return item;
 }
 
 function formatTime(t) {
@@ -149,15 +152,28 @@ function drawRoad(c, state, course, scenes) {
     if (wx % 50 === 0 && wx > 0) label(`${wx}m`, sx + 1, y - 21, 7, '#fff', 'center', NAVY_EDGE);
   }
 
+  // Finish: a chequered line across the road under a banner on two posts, tall enough to
+  // ride through
   const fx = screenX(course.length);
   if (fx < W + 30) {
     const fy = roadY(course.length);
-    rect(c, fx, fy - 62, 2, 57, '#2a2a2a');
-    for (let i = 0; i < 8; i++) {
-      for (let j = 0; j < 4; j++) {
-        rect(c, fx + 2 + i * 3, fy - 62 + j * 3, 3, 3, (i + j) % 2 ? '#111' : '#fff');
+    for (let i = 0; i < 2; i++) {
+      for (let j = 0; j < 5; j++) rect(c, fx - 3 + i * 3, fy - 5 + j * 3, 3, 3, (i + j) % 2 ? '#111' : '#fff');
+    }
+    const top = fy - 122;
+    for (const px of [fx - 23, fx + 20]) {
+      rect(c, px - 1, top, 5, 117, NAVY_EDGE);
+      rect(c, px, top + 1, 3, 116, '#c9ced8');
+      rect(c, px, top + 1, 1, 116, '#f4f6fb');
+    }
+    rect(c, fx - 25, top - 1, 50, 24, NAVY_EDGE);
+    rect(c, fx - 24, top, 48, 22, '#f4f6fb');
+    for (let i = 0; i < 12; i++) {
+      for (const [row, y] of [[0, top], [1, top + 4], [0, top + 14], [1, top + 18]]) {
+        if ((i + row) % 2) rect(c, fx - 24 + i * 4, y, 4, 4, '#111');
       }
     }
+    label('FINISH', fx, top + 13.5, 6, NAVY, 'center').stay = true;
   }
 }
 
@@ -449,12 +465,32 @@ function drawControls(c, state, pressed) {
   label('PEDAL', p.cx, p.cy + 18, 14, '#fff', 'center', '#6e1414');
 }
 
+const CONFETTI = ['#ff5a5a', '#ffd84d', '#5dff7a', '#6fc3ff', '#ff8ad8', '#ffffff'];
+
+// Paper falling from the top of the screen, `t` seconds after it started. Each piece has
+// its own speed, sway and flutter, and comes round again once it drops off the bottom.
+function drawConfetti(c, t) {
+  for (let i = 0; i < 200; i++) {
+    const r = hash(i * 7919 + 13);
+    const fallen = (60 + (r % 70)) * t - ((r >>> 8) % 240);
+    if (fallen < 0) continue;
+    const y = mod(fallen, H + 20) - 10;
+    const x = ((r >>> 17) % W) + Math.sin(t * 2.2 + i) * 9;
+    const flat = Math.sin(t * 9 + i * 1.7) > 0.3;
+    rect(c, x, y, 4, flat ? 2 : 4, CONFETTI[i % CONFETTI.length]);
+  }
+}
+
+let finishedAt = null; // when the finish screen came up, for the confetti
+
 function drawFinish(c, state, best) {
-  rect(c, 0, 0, W, H, 'rgba(10,14,28,0.8)');
-  label('FINISHED', W / 2, 190, 26, '#ffd84d', 'center');
-  label(formatTime(state.time), W / 2, 228, 30, '#fff', 'center');
-  if (best != null) label(`BEST ${formatTime(best)}`, W / 2, 250, 11, MUTED, 'center');
-  label('TAP TO RIDE AGAIN', W / 2, 290, 11, '#5dff7a', 'center');
+  rect(c, 0, 0, W, H, 'rgba(10,14,28,0.55)');
+  finishedAt ??= performance.now();
+  drawConfetti(c, (performance.now() - finishedAt) / 1000);
+  label('FINISHED', W / 2, 112, 26, '#ffd84d', 'center', NAVY_EDGE);
+  label(formatTime(state.time), W / 2, 150, 30, '#fff', 'center', NAVY_EDGE);
+  if (best != null) label(`BEST ${formatTime(best)}`, W / 2, 170, 11, '#d3dbf0', 'center', NAVY_EDGE);
+  label('TAP TO RIDE AGAIN', W / 2, 196, 11, '#5dff7a', 'center', NAVY_EDGE);
 }
 
 // `c` is the low-res pixel buffer; `out` is the device canvas, already scaled so that
@@ -470,8 +506,12 @@ export function draw(c, out, state, course, pressed, best) {
   drawControls(c, state, pressed);
   if (state.finished) {
     // Only the result is readable over the dimmed screen
+    const stay = labels.filter((item) => item.stay);
     labels.length = 0;
+    labels.push(...stay);
     drawFinish(c, state, best);
+  } else {
+    finishedAt = null;
   }
 
   out.imageSmoothingEnabled = false;
