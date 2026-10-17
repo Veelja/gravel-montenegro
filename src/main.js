@@ -15,6 +15,7 @@ const pixels = buffer.getContext('2d');
 const course = buildCourse();
 
 let state = createState();
+let onTitle = true; // the game opens on the title screen, with the leaderboard
 let finishedAt = 0;
 let best = loadBest();
 const pressed = { pedal: 0, minus: 0, plus: 0 }; // seconds of button highlight left
@@ -90,6 +91,12 @@ function doShift(delta) {
   return changed;
 }
 
+// Leave the title screen for the start line; the ride itself starts with the first pedal
+function leaveTitle() {
+  onTitle = false;
+  board.hide();
+}
+
 function restart() {
   state = createState();
   board.hide();
@@ -119,6 +126,10 @@ let gearDrag = null; // { id, y0, shifted: gears moved so far, dragged }
 
 canvas.addEventListener('pointerdown', (e) => {
   e.preventDefault();
+  if (onTitle) {
+    leaveTitle();
+    return;
+  }
   if (state.finished) {
     if (canRestart()) restart();
     return;
@@ -163,6 +174,11 @@ canvas.addEventListener('pointerup', endGearDrag);
 canvas.addEventListener('pointercancel', endGearDrag);
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
+// The leaderboard covers much of the title screen, so a tap on it starts too
+document.getElementById('board').addEventListener('pointerdown', () => {
+  if (onTitle) leaveTitle();
+});
+
 window.addEventListener('keydown', (e) => {
   if (e.repeat) return;
   // Typing a name on the leaderboard isn't game input
@@ -172,7 +188,9 @@ window.addEventListener('keydown', (e) => {
   const isDown = e.code === 'ArrowDown' || e.code === 'KeyS';
   if (!isPedal && !isUp && !isDown && e.code !== 'KeyR') return;
   e.preventDefault();
-  if (e.code === 'KeyR') restart();
+  if (onTitle) {
+    if (isPedal) leaveTitle();
+  } else if (e.code === 'KeyR') restart();
   else if (state.finished) {
     if (isPedal && canRestart()) restart();
   } else if (isPedal) doPedal();
@@ -181,6 +199,7 @@ window.addEventListener('keydown', (e) => {
 
 window.addEventListener('resize', resize);
 resize();
+board.showTop();
 
 // Console access for tuning, e.g. __game.state.x = 400
 window.__game = {
@@ -196,7 +215,7 @@ function frame(now) {
   last = now;
 
   const wasFinished = state.finished;
-  step(state, course, dt);
+  if (!onTitle) step(state, course, dt);
   if (state.finished && !wasFinished) {
     finishedAt = now;
     saveBest(state.time);
@@ -206,7 +225,7 @@ function frame(now) {
   }
   for (const key in pressed) pressed[key] = Math.max(0, pressed[key] - dt);
 
-  draw(pixels, ctx, state, course, pressed, best);
+  draw(pixels, ctx, state, course, pressed, best, onTitle);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

@@ -336,6 +336,7 @@ const GRADE_BARS = ['#ffd84d', '#ffb347', '#ff8a3d', '#ff6a4a', '#ff5a5a'];
 // course profile; the readouts around it leave that spot clear. Like the text, it is drawn
 // at full device resolution.
 const LOGO = { src: 'assets/logo.webp', x: 112, y: 35, w: 58, h: 27 };
+const TITLE_LOGO = { x: 45, y: 34, w: 180, h: 85 }; // the logo, large, on the title screen
 let logo = null;
 {
   const img = new Image();
@@ -590,9 +591,20 @@ function drawFinish(c, state, best) {
   label('TAP TO RIDE AGAIN', W / 2, 140, 11, '#5dff7a', 'center', NAVY_EDGE);
 }
 
+// The screen the game opens on: the logo over the waiting rider, with the leaderboard
+// (a page element, see index.html) below
+function drawTitle(c, best) {
+  rect(c, 0, 0, W, H, 'rgba(10,14,28,0.55)');
+  // Blinks, so it reads as something to do
+  const lit = Math.floor(performance.now() / 500) % 2 === 0;
+  label('TAP TO START', W / 2, 150, 16, lit ? '#5dff7a' : '#c8ffd3', 'center', NAVY_EDGE);
+  if (best != null) label(`YOUR BEST ${formatTime(best)}`, W / 2, 172, 11, '#d3dbf0', 'center', NAVY_EDGE);
+  label('TOP RIDERS', W / 2, 200, 11, '#ffd84d', 'center', NAVY_EDGE);
+}
+
 // `c` is the low-res pixel buffer; `out` is the device canvas, already scaled so that
-// one unit is one buffer pixel.
-export function draw(c, out, state, course, pressed, best) {
+// one unit is one buffer pixel. `title` puts the title screen over the start of the course.
+export function draw(c, out, state, course, pressed, best, title = false) {
   labels.length = 0;
   rect(c, 0, 0, W, H, '#3f7d38');
   const progress = Math.min(1, Math.max(0, state.x / course.length));
@@ -601,9 +613,12 @@ export function draw(c, out, state, course, pressed, best) {
   drawRider(c, state, course);
   drawGateFront(c, gateAt(state, course));
   // The result takes the dashboard's place at the finish
-  if (!state.finished) drawHud(c, state, course);
+  if (!state.finished && !title) drawHud(c, state, course);
   drawControls(c, state, pressed);
-  if (state.finished) {
+  if (title) {
+    labels.length = 0;
+    drawTitle(c, best);
+  } else if (state.finished) {
     // Only the result is readable over the dimmed screen
     const stay = labels.filter((item) => item.stay);
     labels.length = 0;
@@ -616,9 +631,10 @@ export function draw(c, out, state, course, pressed, best) {
   out.imageSmoothingEnabled = false;
   out.drawImage(c.canvas, 0, 0, W, H);
   if (logo && !state.finished) {
+    const at = title ? TITLE_LOGO : LOGO;
     out.imageSmoothingEnabled = true;
     out.imageSmoothingQuality = 'high';
-    out.drawImage(logo, LOGO.x, LOGO.y, LOGO.w, LOGO.h);
+    out.drawImage(logo, at.x, at.y, at.w, at.h);
   }
   out.lineJoin = 'round';
   for (const t of labels) {

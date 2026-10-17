@@ -158,6 +158,16 @@ export function show(time) {
   else refresh();
 }
 
+// Bring the board up on its own, without a run to save, for the title screen
+export function showTop() {
+  if (!enabled) return;
+  shown++;
+  form.hidden = true;
+  status.textContent = '';
+  panel.hidden = false;
+  refresh();
+}
+
 export function hide() {
   shown++;
   panel.hidden = true;
